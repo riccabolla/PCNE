@@ -1,0 +1,139 @@
+#!/bin/bash
+
+# --- Find the location of the accompanying R script ---
+# Get the directory where this script itself resides
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+
+# Assume the R script is in the same directory
+RSCRIPT_PATH="${SCRIPT_DIR}/calculate_multi_plasmid_cn.R"
+
+# Check if the R script actually exists at the expected location
+if [ ! -f "${RSCRIPT_PATH}" ]; then
+    echo >&2 "Error: R script not found at expected location: ${RSCRIPT_PATH}"
+    # Optional: Add a fallback to search PATH if needed, but the primary method should work for Conda installs
+    RSCRIPT_PATH_FALLBACK=$(command -v calculate_multi_plasmid_cn.R)
+    if [ -z "${RSCRIPT_PATH_FALLBACK}" ] || [ ! -f "${RSCRIPT_PATH_FALLBACK}" ]; then
+         echo >&2 "Error: R script 'calculate_multi_plasmid_cn.R' also not found in PATH."
+         exit 1
+    else
+         echo >&2 "Warning: Using R script found via PATH: ${RSCRIPT_PATH_FALLBACK}. Installation might be incomplete or incorrect."
+         RSCRIPT_PATH="${RSCRIPT_PATH_FALLBACK}" # Use the fallback path if primary fails
+    fi
+fi
+# --- End of script location finding ---
+# Exit script on error
+set -e
+# Exit on pipe failures
+set -o pipefail
+
+# --- Default Values ---
+THREADS=1
+OUTPUT_PREFIX="plasmid_cn_result" # Default output prefix
+
+# --- Function: Print Usage ---
+usage() {
+  echo "Usage: $0 -c <chromosome.fasta> -p <plasmid.fasta> -r1 <reads_R1.fastq.gz> -r2 <reads_R2.fastq.gz> [-t <threads>] [-o <output_prefix>]"
+  echo "  -c : Path to chromosome contigs FASTA file (from Platon)"
+  echo "  -p : Path to plasmid contigs FASTA file (from Platon)"
+  echo "  -r1: Path to forward reads (FASTQ format, can be gzipped)"
+  echo "  -r2: Path to reverse reads (FASTQ format, can be gzipped)"
+  echo "  -t : Number of threads (default: ${THREADS})"
+  echo "  -o : Prefix for output files (default: ${OUTPUT_PREFIX})"
+  exit 1
+}
+
+# --- Parse Command-Line Arguments ---
+while getopts ":c:p:r1:r2:t:o:" opt; do
+  case ${opt} in
+    c ) CHR_FASTA=$OPTARG ;;
+    p ) PLS_FASTA=$OPTARG ;;
+    r1 ) READS_R1=$OPTARG ;;
+    r2 ) READS_R2=$OPTARG ;;
+    t ) THREADS=$OPTARG ;;
+    o ) OUTPUT_PREFIX=$OPTARG ;;
+    \? ) echo "Invalid option: -$OPTARG" >&2; usage ;;
+    : ) echo "Invalid option: -$OPTARG requires an argument" >&2; usage ;;
+  esac
+done
+shift $((OPTIND -1))
+
+# --- Check Mandatory Arguments ---
+if [ -z "${CHR_FASTA}" ] || [ -z "${PLS_FASTA}" ] || [ -z "${READS_R1}" ] || [ -z "${READS_R2}" ]; then
+    echo "Error: Missing mandatory arguments."
+    usage
+fi
+
+# --- Check Input Files Exist ---
+if [ ! -f "${CHR_FASTA}" ]; then echo "Error: Chromosome FASTA not found: ${CHR_FASTA}"; exit 1; fi
+if [ ! -f "${PLS_FASTA}" ]; then echo "Error: Plasmid FASTA not found: ${PLS_FASTA}"; exit 1; fi
+if [ ! -f "${READS_R1}" ]; then echo "Error: Reads R1 not found: ${READS_R1}"; exit 1; fi
+if [ ! -f "${READS_R2}" ]; then echo "Error: Reads R2 not found: ${READS_R2}"; exit 1; fi
+
+# --- Check Tool Dependencies ---
+command -v bwa >/dev/null 2>&1 || { echo >&2 "Error: bwa not found in PATH."; exit 1; }
+command -v samtools >/dev/null 2>&1 || { echo >&2 "Error: samtools not found in PATH."; exit 1; }
+command -v Rscript >/dev/null 2>&1 || { echo >&2 "Error: Rscript not found in PATH."; exit 1; }
+# Assuming the R script is in the same directory or in PATH
+RSCRIPT_PATH=$(command -v calculate_multi_plasmid_cn.R || echo "./calculate_multi_plasmid_cn.R")
+if [ ! -f "${RSCRIPT_PATH}" ]; then echo >&2 "Error: R script not found: ${RSCRIPT_PATH}"; exit 1; fi
+
+
+# --- Define Output File Names ---
+COMBINED_REF="${OUTPUT_PREFIX}_combined_reference.fasta"
+SORTED_BAM="${OUTPUT_PREFIX}_alignment.sorted.bam"
+COVERAGE_SUMMARY="${OUTPUT_PREFIX}_coverage_summary.txt"
+FINAL_REPORT_TSV="${OUTPUT_PREFIX}_plasmid_copy_numbers.tsv"
+
+echo "--- Starting Plasmid Copy Number Estimation ---"
+echo "Chromosome FASTA: ${CHR_FASTA}"
+echo "Plasmid FASTA:    ${PLS_FASTA}"
+echo "Reads R1:         ${READS_R1}"
+echo "Reads R2:         ${READS_R2}"
+echo "Threads:          ${THREADS}"
+echo "Output Prefix:    ${OUTPUT_PREFIX}"
+echo "-----------------------------------------------"
+
+# --- Workflow Steps ---
+
+# 1) Concatenate chromosome and plasmid fasta
+echo "[Step 1/7] Creating combined reference: ${COMBINED_REF}"
+cat "${CHR_FASTA}" "${PLS_FASTA}" > "${COMBINED_REF}"
+echo "Done."
+
+# 2) bwa index
+echo "[Step 2/7] Indexing combined reference..."
+bwa index "${COMBINED_REF}"
+echo "Done."
+
+# 3) bwa mem > .bam (via samtools view)
+echo "[Step 3/7] Aligning reads with BWA-MEM..."
+# Intermediate BAM file (unsorted)
+UNSORTED_BAM="${OUTPUT_PREFIX}_alignment.unsorted.bam"
+bwa mem -t ${THREADS} "${COMBINED_REF}" "${READS_R1}" "${READS_R2}" | \
+  samtools view -@ ${THREADS} -Sb -o "${UNSORTED_BAM}"
+echo "Done."
+
+# 4) samtools sort > sorted.bam
+echo "[Step 4/7] Sorting BAM file: ${SORTED_BAM}"
+samtools sort -@ ${THREADS} -o "${SORTED_BAM}" "${UNSORTED_BAM}"
+rm "${UNSORTED_BAM}" # Remove intermediate unsorted BAM
+echo "Done."
+
+# 5) samtools index sorted.bam
+echo "[Step 5/7] Indexing sorted BAM file..."
+samtools index -@ ${THREADS} "${SORTED_BAM}"
+echo "Done."
+
+# 6) samtools coverage sorted-bam > sample_name_coverage.txt
+echo "[Step 6/7] Calculating coverage: ${COVERAGE_SUMMARY}"
+samtools coverage "${SORTED_BAM}" -o "${COVERAGE_SUMMARY}"
+echo "Done."
+
+# 7) R script to read .txt, extract coverage data, calculate, and output a .tsv file
+echo "[Step 7/7] Calculating copy numbers using R script..."
+Rscript "${RSCRIPT_PATH}" "${COVERAGE_SUMMARY}" "${PLS_FASTA}" "${FINAL_REPORT_TSV}"
+echo "Done. Final report: ${FINAL_REPORT_TSV}"
+
+echo "--- Workflow Complete ---"
+
+exit 0

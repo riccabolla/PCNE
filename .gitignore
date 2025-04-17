@@ -1,0 +1,33 @@
+# Bioinformatics intermediate files
+*.bai
+*.bam
+*.sam
+*.sai
+*_combined_reference.fasta.amb
+*_combined_reference.fasta.ann
+*_combined_reference.fasta.bwt
+*_combined_reference.fasta.pac
+*_combined_reference.fasta.sa
+*_coverage_summary.txt
+
+# General logs and temporary files
+*.log
+*.tmp
+*.bak
+
+# R temporary files
+.Rhistory
+.RData
+.Ruserdata
+
+# Conda build artifacts
+conda-build/
+conda-bld/
+*.tar.bz2
+
+# OS-specific files (optional but recommended)
+.DS_Store
+Thumbs.db
+
+# IDE specific (optional)
+.vscode/
