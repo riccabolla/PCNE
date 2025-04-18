@@ -1,13 +1,11 @@
 {% set name = "pcne" %}
-{% set version = "0.1.0" %} # Start with an initial version
+{% set version = "0.1.0" %}
 
 package:
   name: {{ name|lower }}
   version: {{ version }}
 
 source:
-  # This 'path' tells conda build to look in the directory above the recipe directory (i.e., your project root)
-  # This is used when building locally.
   path: ..
   # NOTE: When submitting to Bioconda, you'll typically replace 'path' with 'url' pointing
   # to a release tarball on GitHub and add a 'sha256' checksum. Example:
@@ -21,24 +19,19 @@ build:
   noarch: generic
 
 requirements:
-  # Host requirements are needed during the build process itself.
   host:
-    - coreutils # Provides 'install' command often used in build.sh (good practice)
-  # Run requirements are needed to actually run your tool.
+    - coreutils 
   run:
     - bash 
     - bwa >=0.7.19 
-    - samtools >=1.20 # Required for the main script
-    - r-base >=4.4.2 # Base R environment
-    - r-readr >=2.1.5 # R package for reading files
-    - r-dplyr >=1.1.4 # R package for data manipulation
+    - samtools >=1.20 
+    - r-base >=4.4.2 
+    - r-readr >=2.1.5 
+    - r-dplyr >=1.1.4 
 
 test:
-  # These commands will be run by conda-build after installation to check if it worked.
   commands:
-    # Check if the main script was installed and is findable in the PATH
     - command -v pcne
-    # Execute the script with the help flag (assuming your script has one or exits cleanly)
     - pcne -h
 
 about:
@@ -47,7 +40,6 @@ about:
   license_file: ../LICENSE 
   summary: 'Estimates plasmid copy number from assembled genome.'
   dev_url: https://github.com/riccabolla/PCNE 
-# Extra configuration for Bioconda (optional but good practice)
 extra:
   recipe-maintainers:
     - riccabolla 

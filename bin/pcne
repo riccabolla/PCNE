@@ -1,10 +1,22 @@
 #!/bin/bash
+set -e
+set -o pipefail
 
+# --- Print Banner ---
+cat << "EOF"
+
+   ____   ____ _   _ ____
+  |  _ \ / ___| \ | | ____|
+  | |_) | |   |  \| |  _|
+  |  __/| |___| |\  | |___
+  |_|    \____|_| \_|_____|
+  Plasmid Copy Number Estimator
+
+EOF
+# --- End Banner ---
 # --- Find the location of the accompanying R script ---
-# Get the directory where this script itself resides
-SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
-# Assume the R script is in the same directory
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 RSCRIPT_PATH="${SCRIPT_DIR}/PCNE.R"
 
 # Check if the R script actually exists at the expected location
@@ -64,19 +76,6 @@ while getopts ":a:c:p:C:P:r:R:t:o:h" opt; do
   esac
 done
 shift $((OPTIND -1))
-# --- Start Debugging ---
-echo "DEBUG: Immediately after getopts and shift:"
-echo "DEBUG: CHR_FASTA='${CHR_FASTA}'"
-echo "DEBUG: PLS_FASTA='${PLS_FASTA}'"
-echo "DEBUG: ASSEMBLY_FASTA='${ASSEMBLY_FASTA}'"
-echo "DEBUG: CHR_LIST_FILE='${CHR_LIST_FILE}'"
-echo "DEBUG: PLS_LIST_FILE='${PLS_LIST_FILE}'"
-echo "DEBUG: READS_R1='${READS_R1}'" # <-- Let's see this value
-echo "DEBUG: READS_R2='${READS_R2}'" # <-- Let's see this value
-echo "DEBUG: THREADS='${THREADS}'"
-echo "DEBUG: OUTPUT_PREFIX='${OUTPUT_PREFIX}'"
-echo "DEBUG: Remaining arguments: '$@'" # See what's left after shift
-echo "--- End Debugging ---"
 
 # --- Argument Validation Logic ---
 
@@ -86,13 +85,13 @@ MODE=0 # Initialize MODE variable (0=Undetermined, 1=Separate Files, 2=Assembly+
 if [[ -n "${CHR_FASTA}" && -n "${PLS_FASTA}" ]] && \
    [[ -n "${ASSEMBLY_FASTA}" || -n "${CHR_LIST_FILE}" || -n "${PLS_LIST_FILE}" ]]; then
   echo "Error: Conflicting arguments. Cannot use -c/-p together with -a/-C/-P." >&2
-  usage # Print usage message (defined earlier in your script)
+  usage # Print usage message
   exit 1
 fi
 
 # 2. Check if Mode 1 is intended and valid: (-c AND -p) AND NOT (-a OR -C OR -P)
 if [[ -n "${CHR_FASTA}" && -n "${PLS_FASTA}" ]]; then
-  # Ensure Mode 2 args are absent (this check is slightly redundant due to conflict check above, but safe)
+  # Ensure Mode 2 args are absent
   if [[ -n "${ASSEMBLY_FASTA}" || -n "${CHR_LIST_FILE}" || -n "${PLS_LIST_FILE}" ]]; then
      echo "Error: Conflicting arguments (Mode 1 & Mode 2 args found)." >&2 # Should not happen if first check works
      usage
@@ -109,7 +108,7 @@ if [[ -n "${CHR_FASTA}" && -n "${PLS_FASTA}" ]]; then
 
 # 3. Check if Mode 2 is intended and valid: (-a AND -C AND -P) AND NOT (-c OR -p)
 elif [[ -n "${ASSEMBLY_FASTA}" && -n "${CHR_LIST_FILE}" && -n "${PLS_LIST_FILE}" ]]; then
-   # Ensure Mode 1 args are absent (redundant check, but safe)
+   # Ensure Mode 1 args are absent
    if [[ -n "${CHR_FASTA}" || -n "${PLS_FASTA}" ]]; then
      echo "Error: Conflicting arguments." >&2 
      usage
@@ -127,7 +126,7 @@ fi
 
 # 4. Check if neither valid mode was detected (or required reads missing if check was only here)
 if [[ ${MODE} -eq 0 ]]; then
-   # Check if reads were provided, as they are always needed
+   # Check if reads were provided
    if [[ -z "${READS_R1}" || -z "${READS_R2}" ]]; then
        echo "Error: Missing mandatory read files (-r1 and -r2)." >&2
    else
@@ -181,7 +180,7 @@ elif [[ ${MODE} -eq 2 ]]; then
     echo "Plasmid List     (-P): ${PLS_LIST_FILE}"
 fi
 
-# Print common inputs (these are always required)
+# Print common inputs
 echo "Reads R1         (-r1): ${READS_R1}"
 echo "Reads R2         (-r2): ${READS_R2}"
 echo "Threads          (-t): ${THREADS}"
@@ -208,7 +207,6 @@ elif [[ ${MODE} -eq 2 ]]; then
     echo "Reference for alignment set to: ${COMBINED_REF}"
 
 else
-    # This case should ideally not be reached if argument validation is robust
     echo "Error: Invalid mode detected (${MODE}) before reference creation. Exiting." >&2
     exit 1
 fi
@@ -242,14 +240,14 @@ echo "[Step 6/7] Calculating coverage: ${COVERAGE_SUMMARY}"
 samtools coverage "${SORTED_BAM}" -o "${COVERAGE_SUMMARY}"
 echo "Done."
 
-# 7) R script to read .txt, extract coverage data, calculate, and output a .tsv file
+# 7) R script
 echo "[Step 7/7] Preparing contig lists and calculating copy numbers..."
 # Define variables for paths to be passed to R
 chr_name_list_arg=""
 pls_name_list_arg=""
-# Define potential temporary filenames
-local tmp_chr_list="${OUTPUT_PREFIX}_chr_names.tmp"
-local tmp_pls_list="${OUTPUT_PREFIX}_pls_names.tmp"
+# Define temporary filenames (mode 1)
+tmp_chr_list="${OUTPUT_PREFIX}_chr_names.tmp"
+tmp_pls_list="${OUTPUT_PREFIX}_pls_names.tmp"
 
 # Prepare list file paths based on mode
 if [[ ${MODE} -eq 1 ]]; then
@@ -278,7 +276,7 @@ echo "Running R script..."
 Rscript "${RSCRIPT_PATH}" "${COVERAGE_SUMMARY}" "${chr_name_list_arg}" "${pls_name_list_arg}" "${FINAL_REPORT_TSV}"
 R_EXIT_CODE=$? # Capture R script exit code
 
-# Clean up temporary list files if they were created in Mode 1
+# Clean up temporary list files (Mode 1)
 if [[ ${MODE} -eq 1 ]]; then
     echo "Cleaning up temporary list files..."
     rm -f "${tmp_chr_list}" "${tmp_pls_list}"

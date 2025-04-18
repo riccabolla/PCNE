@@ -1,44 +1,40 @@
 #!/usr/bin/env Rscript
 
 # Script to calculate plasmid copy number
-# Takes samtools coverage output and the original plasmid fasta file as input.
-
-# --- Load Libraries ---
-suppressPackageStartupMessages(library(readr))
-suppressPackageStartupMessages(library(dplyr))
 # --- Get Command Line Arguments ---
 args <- commandArgs(trailingOnly = TRUE)
-if (length(args) != 4) { # Now expects 4 arguments
+if (length(args) != 4) {
   message("Usage: Rscript calculate_multi_plasmid_cn.R <coverage_summary.txt> <chr_name_list.txt> <pls_name_list.txt> <output.tsv>")
   message("  <coverage_summary.txt>: Output file from 'samtools coverage'")
-  message("  <chr_name_list.txt>: File containing list of chromosome contig names (one per line)") 
-  message("  <pls_name_list.txt>: File containing list of plasmid contig names (one per line)") 
+  message("  <chr_name_list.txt>: File containing list of chromosome contig names (one per line)")
+  message("  <pls_name_list.txt>: File containing list of plasmid contig names (one per line)")
   message("  <output.tsv>: Path for the final TSV report")
   stop("Incorrect number of arguments supplied.", call. = FALSE)
 }
 coverage_file <- args[1]
-chr_list_file <- args[2] 
-pls_list_file <- args[3] 
-output_file <- args[4] 
+chr_list_file <- args[2]
+pls_list_file <- args[3]
+output_file <- args[4]
 
+# --- Function to Read Name Lists ---
 read_name_list <- function(filepath, list_type) {
   if (!file.exists(filepath)) {
       stop(paste("Error:", list_type, "list file not found:", filepath), call. = FALSE)
   }
   tryCatch({
       names <- readLines(filepath)
-      names <- trimws(names) # Remove leading/trailing whitespace
-      names <- names[names != ""] # Remove empty lines
+      names <- trimws(names)
+      names <- names[names != ""]
       if (length(names) == 0) {
           warning(paste("Warning: No names found in", list_type, "list file:", filepath), call. = FALSE)
       }
-      return(unique(names)) # Return unique names
+      return(unique(names))
   }, error = function(e) {
       stop(paste("Error reading", list_type, "list file '", filepath, "': ", e$message), call. = FALSE)
   })
 }
 
-# Read both lists
+# --- Read Name Lists ---
 message(paste("Reading chromosome contig names from:", chr_list_file))
 chr_names_list <- read_name_list(chr_list_file, "Chromosome")
 message(paste("Found", length(chr_names_list), "unique chromosome contig names."))
@@ -47,39 +43,48 @@ message(paste("Reading plasmid contig names from:", pls_list_file))
 plasmid_names_list <- read_name_list(pls_list_file, "Plasmid")
 message(paste("Found", length(plasmid_names_list), "unique plasmid contig names."))
 
-# Check for overlap between lists
+# --- Check for Overlap ---
 overlap <- intersect(chr_names_list, plasmid_names_list)
 if (length(overlap) > 0) {
     warning(paste("Warning: The following contigs are listed as both chromosome and plasmid:", paste(overlap, collapse=", ")), call. = FALSE)
-    # Prioritize plasmid status by removing overlapping contigs from the chromosome list
     chr_names_list <- setdiff(chr_names_list, overlap)
     message(paste("Overlapping contigs will be treated as plasmids. Updated chromosome list size:", length(chr_names_list)))
 }
 
-# Read Coverage Data (as before)
+# --- Read and Process Coverage Data ---
 message(paste("Reading coverage file:", coverage_file))
 tryCatch({
-  # Load necessary libraries within tryCatch or ensure they are loaded before
+  # Load libraries needed for this block
   suppressPackageStartupMessages(library(readr))
   suppressPackageStartupMessages(library(dplyr))
 
-  coverage_data <- readr::read_tsv(coverage_file, comment = "#", col_names = TRUE, show_col_types = FALSE) %>%
-    # Immediately check for required columns after reading
+  # Define the exact column names based on the expected header
+  expected_colnames <- c("#rname", "startpos", "endpos", "numreads", "covbases", "coverage", "meandepth", "meanbaseq", "meanmapq")
+
+  # Read the file using skip=1 and providing col_names manually
+  coverage_data <- readr::read_tsv(
+      coverage_file,
+      skip = 1,                   
+      col_names = expected_colnames,
+      show_col_types = FALSE
+  ) %>%
     {
+      # Check if the required columns were assigned correctly
       required_cols <- c("#rname", "startpos", "endpos", "meandepth")
+
       if (!all(required_cols %in% names(.))) {
+        print(paste("Assigned column names:", paste(names(.), collapse=", ")))
         missing_cols <- setdiff(required_cols, names(.))
-        stop(paste("Coverage file missing required columns:", paste(missing_cols, collapse=", ")), call. = FALSE)
+        stop(paste("Coverage file missing required columns after manual assignment:", paste(missing_cols, collapse=", ")), call. = FALSE)
       }
       . # Pass data frame through if check passes
     } %>%
-    # Rename, calculate length, ensure numeric types, and filter
+    # Rename using backticks
     dplyr::rename(contig_name = `#rname`) %>%
+    # Mutate and filter using standard names
     dplyr::mutate(length = endpos - startpos,
-                  # Ensure key columns are numeric just in case read_tsv guessed wrong
                   across(c(startpos, endpos, length, meandepth), as.numeric)) %>%
     dplyr::filter(length > 0) %>%
-    # Final check if any data remains after filtering
     { if(nrow(.) == 0) stop("No valid contigs found in coverage data after filtering.", call. = FALSE); . }
 
 }, error = function(e) {
@@ -121,7 +126,7 @@ message(sprintf("Chromosome Summary: %d contigs processed, Total Length %d, Weig
 
 # --- Calculate Copy Number for Each Plasmid ---
 message("Calculating plasmid copy numbers...")
-# Filter coverage data to find relevant plasmid rows
+# Filter coverage data to find plasmid rows
 all_plasmid_coverage_data <- coverage_data %>%
   dplyr::filter(contig_name %in% plasmid_names_list)
 
@@ -178,11 +183,25 @@ if (length(results_list) > 0) {
   final_report <- dplyr::bind_rows(results_list)
 
   message(paste("Writing final report to:", output_file))
-  readr::write_tsv(final_report, output_file)
+  tryCatch({
+      readr::write_tsv(final_report, output_file)
+      message("Output file written successfully.")
+  }, error = function(e) {
+      stop(paste("Error writing output file '", output_file, "': ", e$message), call. = FALSE)
+  })
+
 } else {
-  warning("No plasmid copy numbers were calculated. Output file will be empty or not created.", call. = FALSE)
-  # Create an empty file or a file with just headers
-  file.create(output_file) 
+  warning("No plasmid copy numbers were calculated. Output file will be empty or may not be created.", call. = FALSE)
+  # Create an empty file with headers
+  tryCatch({
+      # Define headers matching the data frame structure
+      empty_df <- data.frame(plasmid_contig=character(), length=integer(), mean_depth=double(),
+                             chromosome_mean_depth=double(), estimated_copy_number=double())
+      readr::write_tsv(empty_df, output_file)
+      message(paste("Empty report file with headers written to:", output_file))
+  }, error = function(e){
+      stop(paste("Error writing empty output file '", output_file, "': ", e$message), call. = FALSE)
+  })
 }
 
 message("R script finished.")

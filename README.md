@@ -2,15 +2,13 @@
 **P**lasmid **C**opy **N**umber **E**stimator (**PCNE**) is a simple tool to estimate the copy number of plasmid from an assembled genome.
 ## Disclaimer
 This tool requires a previous step of plasmid identification using tools like Platon (reccomended), MOB-Suite, PlasmidFinder... <br>
-Chromosome's contigs and each plasmid's contigs should be in separated FASTA files. <br>
-If not, please provide a .txt file reporting the path and the name of chromosome and plasmid contigs. <br>
 ## Introduction
 This tool automates the process of:<br>
 1) Creating a combined reference from chromosome and plasmid contigs.<br>
 2) Indexing the reference using BWA.<br>
 3) Aligning paired-end sequencing reads to the combined reference using BWA-MEM.<br>
 4) Sorting and indexing the resulting alignment (BAM file) using Samtools.<br>
-5) Calculating per-contig coverage using samtools coverage. >br>
+5) Calculating per-contig coverage using samtools coverage. <br>
 6) Calculating the length-weighted average depth of chromosome contigs.<br>
 7) Calculating the estimated copy number for each plasmid contig relative to the average chromosome depth using an R script.<br>
 ## Installation<br>
@@ -24,9 +22,8 @@ conda config --add channels conda-forge
 conda config --set channel_priority strict
 ```
 2) **Create a new environment and install:**<br>
-#Replace 'plasmid_cn_env' with your desired environment name<br>
 ```
-conda create -n plasmid_cn_env plasmid-copy-estimator
+conda create -n pcne_env pcne
 conda activate plasmid_cn_env
 ```
 (Note: Until the package is accepted into Bioconda, you would install from a local build using conda install --use-local plasmid-copy-estimator after building it yourself with conda build conda/)<br>
@@ -38,25 +35,29 @@ The tool relies on the following software, which will be installed automatically
 4) **R Packages**: readr (>=2.1.5), dplyr (>=1.1.4)<br>
 ## Usage<br>
 ```
-plasmid-copy-estimator -c <chromosome.fasta> -p <plasmid.fasta> -r <reads_R1.fastq.gz> -R <reads_R2.fastq.gz> [-t <threads>] [-o <output_prefix>]
+pcne -c <chromosome.fasta> -p <plasmid.fasta> -r <reads_R1.fastq.gz> -R <reads_R2.fastq.gz> [-t <threads>] [-o <output_prefix>]
 ```
 ## Command line options: <br>
 ```
--c FILE       Path to chromosome contigs FASTA file 
--p FILE       Path to plasmid contigs FASTA file
--a FILE       Path to assembled genome (FASTA file)
--C FILE       Path to the chromosome contigs list
--P FILE       Path to the plasmid contigs list
+-c FILE       Path to chromosome contigs FASTA file (mode 1)
+-p FILE       Path to plasmid contigs FASTA file (mode 1)
+-a FILE       Path to assembled genome (FASTA file) (mode 2)
+-C FILE       Path to the chromosome contigs list (mode 2)
+-P FILE       Path to the plasmid contigs list (mode 2)
 -r FILE      Path to forward reads (FASTQ format, can be gzipped) [Required] 
 -R FILE      Path to reverse reads (FASTQ format, can be gzipped) [Required] 
 -t INT        Number of threads to use for alignment and sorting (default: 1) [Optional] 
 -o STR        Prefix for output files (default: pcne_result) [Optional] 
--h            Display help message (implicit) Example# Activate the conda environment first conda activate plasmid_cn_env
+-h            Display help message (implicit) 
 ```
 
 # Run the tool
+
+The tool can be run in two different ways: <br>
+**Mode 1**: it require two separate FASTA files for chromosome and plasmid(s). <br>
+*Example Mode 1*
 ```
-plasmid-copy-estimator \ 
+pcne \ 
   -c platon_output/my_sample.chromosome.fasta \ 
   -p platon_output/my_sample.plasmid.fasta \ 
   -r input_reads/my_sample_R1.fastq.gz \ 
@@ -64,8 +65,18 @@ plasmid-copy-estimator \
   -t 8 \ 
   -o my_sample_copy_num
 ```
-OutputThe tool generates several intermediate files (reference, index files, BAM file, coverage summary). <br>
-The main output is a TSV (Tab-Separated Values) file named **<output_prefix>_plasmid_copy_numbers.tsv**
+**Mode 2**: it require an assembled FASTA file, a list file with contig(s) assigned to chromosome, and a list file of contig(s) assigned to plasmid(S).
+The list should be structured as follow:
+```
+plasmid1.fasta
+plasmid2.fasta
+plasmid3.fasta
+...
+```
+**Note**: if file are not in the working folder, provide the PATH. <br>
+
+The tool generates several intermediate files (reference, index files, BAM file, coverage summary). <br>
+For both modes the main output is a TSV (Tab-Separated Values) file named **<output_prefix>_pcne.tsv**
 
 Example output.tsv: <br>
 | plasmid_contig |length | mean_depth |chromosome_mean_depth |estimated_copy_number |
