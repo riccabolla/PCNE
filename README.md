@@ -26,9 +26,8 @@ conda config --set channel_priority strict
 conda create -n pcne_env pcne
 conda activate pcne_env
 ```
-(Note: Until the package is accepted into Bioconda, you would install from a local build using conda install --use-local plasmid-copy-estimator after building it yourself with conda build conda/)<br>
 ## Dependencies. <br>
-The tool relies on the following software, which will be installed automatically by Conda:<br>
+The tool relies on the following softwares, which will be installed automatically by Conda:<br>
 1) **BWA** (>=0.7.18 recommended)<br>
 2) **Samtools** (>=1.2 recommended)<br>
 3) **R** (>=4.4.2 recommended)<br>
@@ -54,7 +53,7 @@ pcne -c <chromosome.fasta> -p <plasmid.fasta> -r <reads_R1.fastq.gz> -R <reads_R
 # Run the tool
 
 The tool can be run in two different ways: <br>
-**Mode 1**: it require two separate FASTA files for chromosome and plasmid(s). <br>
+**Mode 1**: it requires two separate FASTA files for chromosome and plasmid(s). <br>
 ```
 #Example Mode 1
 pcne \ 
@@ -65,7 +64,7 @@ pcne \
   -t 8 \ 
   -o my_sample_pcne
 ```
-**Mode 2**: it require an assembled FASTA file, a list file with contig(s) assigned to chromosome, and a list file of contig(s) assigned to plasmid(S).
+**Mode 2**: it requires an assembled FASTA file, a list file with contig(s) assigned to chromosome, and a list file of contig(s) assigned to plasmid(S).
 The list should be structured as follow:
 ```
 plasmid1.fasta
@@ -84,7 +83,7 @@ pcne \
   -t 8 \ 
   -o my_sample_pcne
 ```
-**Note**: if file are not in the working folder, provide the PATH. <br>
+**Note**: if files are not in the working folder, provide the PATH. <br>
 
 The tool generates several intermediate files (reference, index files, BAM file, coverage summary). <br>
 For both modes the main output is a TSV (Tab-Separated Values) file named **<output_prefix>_pcne.tsv**

@@ -7,15 +7,11 @@ package:
 
 source:
   path: ..
-  # NOTE: When submitting to Bioconda, you'll typically replace 'path' with 'url' pointing
-  # to a release tarball on GitHub and add a 'sha256' checksum. Example:
-  # url: https://github.com/your_username/PlasmidCopynum/archive/refs/tags/v{{ version }}.tar.gz
-  # sha256: <checksum_of_the_tarball>
+  url: https://github.com/riccabolla/PCNE/archive/refs/tags/{{ version }}.tar.gz
+  sha256: 2e3f278d378d4f82b6d400b34a6448b8166184676eb98b773a722b2c9be5a1e1
 
 build:
-  number: 0 # Increment if you rebuild the same version due to recipe changes
-  # 'noarch: generic' means this package can run on any OS/architecture
-  # because it only contains scripts (not compiled code).
+  number: 0 
   noarch: generic
 
 requirements:
