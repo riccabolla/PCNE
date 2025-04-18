@@ -1,0 +1,297 @@
+#!/bin/bash
+
+# --- Find the location of the accompanying R script ---
+# Get the directory where this script itself resides
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+
+# Assume the R script is in the same directory
+RSCRIPT_PATH="${SCRIPT_DIR}/PCNE.R"
+
+# Check if the R script actually exists at the expected location
+if [ ! -f "${RSCRIPT_PATH}" ]; then
+    echo >&2 "Error: R script not found at expected location: ${RSCRIPT_PATH}"
+    # Optional: Add a fallback to search PATH if needed, but the primary method should work for Conda installs
+    RSCRIPT_PATH_FALLBACK=$(command -v PCNE.R)
+    if [ -z "${RSCRIPT_PATH_FALLBACK}" ] || [ ! -f "${RSCRIPT_PATH_FALLBACK}" ]; then
+         echo >&2 "Error: R script 'PCNE.R' also not found in PATH."
+         exit 1
+    else
+         echo >&2 "Warning: Using R script found via PATH: ${RSCRIPT_PATH_FALLBACK}. Installation might be incomplete or incorrect."
+         RSCRIPT_PATH="${RSCRIPT_PATH_FALLBACK}" # Use the fallback path if primary fails
+    fi
+fi
+# --- End of script location finding ---
+# Exit script on error
+set -e
+# Exit on pipe failures
+set -o pipefail
+
+# --- Default Values ---
+THREADS=1
+OUTPUT_PREFIX="pcne_result" # Default output prefix
+
+# --- Function: Print Usage ---
+usage() {
+  echo "Usage: $0 -c <chromosome.fasta> -p <plasmid.fasta> -r <reads_R1.fastq.gz> -R <reads_R2.fastq.gz> [-t <threads>] [-o <output_prefix>]"
+  echo "  -c : Path to chromosome contigs FASTA file"
+  echo "  -p : Path to plasmid contigs FASTA file"
+  echo "  -r: Path to forward reads (FASTQ format, can be gzipped) (Mandatory)"
+  echo "  -R: Path to reverse reads (FASTQ format, can be gzipped) (Mandatory)"
+  echo "  -a : Path to the assembled genome FASTA file (optional, if not provided, will use -c)"
+  echo "  -C : Path to file containing the list of chromosomal contigs (Required if using -a)"
+  echo "  -P : Path to file containing the list of plasmid contigs (Required if using -a)"
+  echo "  -t : Number of threads (default: ${THREADS})"
+  echo "  -o : Prefix for output files (default: ${OUTPUT_PREFIX})"
+  echo "  -h : Display this help message and exit"
+}
+
+# --- Parse Command-Line Arguments ---
+while getopts ":a:c:p:C:P:r:R:t:o:h" opt; do
+  case ${opt} in
+    c ) CHR_FASTA=$OPTARG ;;         
+    p ) PLS_FASTA=$OPTARG ;;         
+    a ) ASSEMBLY_FASTA=$OPTARG ;;    
+    C ) CHR_LIST_FILE=$OPTARG ;;    
+    P ) PLS_LIST_FILE=$OPTARG ;;    
+    r ) READS_R1=$OPTARG ;;         
+    R ) READS_R2=$OPTARG ;;        
+    t ) THREADS=$OPTARG ;;           
+    o ) OUTPUT_PREFIX=$OPTARG ;;     
+    h ) usage; exit 0 ;;
+    \? ) echo "Invalid option: -$OPTARG" >&2; usage; exit 1 ;;
+    # Corrected message for missing argument case
+    : ) echo "Option -$OPTARG requires an argument." >&2; usage; exit 1 ;;
+  esac
+done
+shift $((OPTIND -1))
+# --- Start Debugging ---
+echo "DEBUG: Immediately after getopts and shift:"
+echo "DEBUG: CHR_FASTA='${CHR_FASTA}'"
+echo "DEBUG: PLS_FASTA='${PLS_FASTA}'"
+echo "DEBUG: ASSEMBLY_FASTA='${ASSEMBLY_FASTA}'"
+echo "DEBUG: CHR_LIST_FILE='${CHR_LIST_FILE}'"
+echo "DEBUG: PLS_LIST_FILE='${PLS_LIST_FILE}'"
+echo "DEBUG: READS_R1='${READS_R1}'" # <-- Let's see this value
+echo "DEBUG: READS_R2='${READS_R2}'" # <-- Let's see this value
+echo "DEBUG: THREADS='${THREADS}'"
+echo "DEBUG: OUTPUT_PREFIX='${OUTPUT_PREFIX}'"
+echo "DEBUG: Remaining arguments: '$@'" # See what's left after shift
+echo "--- End Debugging ---"
+
+# --- Argument Validation Logic ---
+
+MODE=0 # Initialize MODE variable (0=Undetermined, 1=Separate Files, 2=Assembly+Lists)
+
+# 1. Check for conflicting modes: (-c AND -p) AND (-a OR -C OR -P)
+if [[ -n "${CHR_FASTA}" && -n "${PLS_FASTA}" ]] && \
+   [[ -n "${ASSEMBLY_FASTA}" || -n "${CHR_LIST_FILE}" || -n "${PLS_LIST_FILE}" ]]; then
+  echo "Error: Conflicting arguments. Cannot use -c/-p together with -a/-C/-P." >&2
+  usage # Print usage message (defined earlier in your script)
+  exit 1
+fi
+
+# 2. Check if Mode 1 is intended and valid: (-c AND -p) AND NOT (-a OR -C OR -P)
+if [[ -n "${CHR_FASTA}" && -n "${PLS_FASTA}" ]]; then
+  # Ensure Mode 2 args are absent (this check is slightly redundant due to conflict check above, but safe)
+  if [[ -n "${ASSEMBLY_FASTA}" || -n "${CHR_LIST_FILE}" || -n "${PLS_LIST_FILE}" ]]; then
+     echo "Error: Conflicting arguments (Mode 1 & Mode 2 args found)." >&2 # Should not happen if first check works
+     usage
+     exit 1
+  fi
+  # Check for required read files for Mode 1
+  if [[ -z "${READS_R1}" || -z "${READS_R2}" ]]; then
+     echo "Error: Missing read files (-r1 and -r2)" >&2
+     usage
+     exit 1
+  fi
+  echo "Input Mode 1 detected (arguments -c and -p provided)."
+  MODE=1
+
+# 3. Check if Mode 2 is intended and valid: (-a AND -C AND -P) AND NOT (-c OR -p)
+elif [[ -n "${ASSEMBLY_FASTA}" && -n "${CHR_LIST_FILE}" && -n "${PLS_LIST_FILE}" ]]; then
+   # Ensure Mode 1 args are absent (redundant check, but safe)
+   if [[ -n "${CHR_FASTA}" || -n "${PLS_FASTA}" ]]; then
+     echo "Error: Conflicting arguments." >&2 
+     usage
+     exit 1
+   fi
+   # Check for required read files for Mode 2
+   if [[ -z "${READS_R1}" || -z "${READS_R2}" ]]; then
+     echo "Error: Missing read files (-r1 and -r2)" >&2
+     usage
+     exit 1
+   fi
+   echo "Input Mode 2 detected (arguments -a,-C and -P provided)."
+   MODE=2
+fi
+
+# 4. Check if neither valid mode was detected (or required reads missing if check was only here)
+if [[ ${MODE} -eq 0 ]]; then
+   # Check if reads were provided, as they are always needed
+   if [[ -z "${READS_R1}" || -z "${READS_R2}" ]]; then
+       echo "Error: Missing mandatory read files (-r1 and -r2)." >&2
+   else
+       # Reads provided, but mode arguments are wrong/incomplete
+       echo "Error: Invalid or incomplete argument combination." >&2
+       echo "Please provide EITHER required arguments for Mode 1 (-c, -p, -r1, -r2)" >&2
+       echo "OR required arguments for Mode 2 (-a, -C, -P, -r1, -r2)." >&2
+   fi
+   usage
+   exit 1
+fi
+
+echo "Checking input files."
+if [ ! -f "${READS_R1}" ]; then echo "Error: Reads R1 not found: ${READS_R1}"; exit 1; fi
+if [ ! -f "${READS_R2}" ]; then echo "Error: Reads R2 not found: ${READS_R2}"; exit 1; fi
+if [[ ${MODE} -eq 1 ]]; then
+    # Mode 1 checks
+    if [ ! -f "${CHR_FASTA}" ]; then echo "Error: Chromosome FASTA file (-c) not found: ${CHR_FASTA}"; exit 1; fi
+    if [ ! -f "${PLS_FASTA}" ]; then echo "Error: Plasmid FASTA file (-p) not found: ${PLS_FASTA}"; exit 1; fi
+elif [[ ${MODE} -eq 2 ]]; then
+    # Mode 2 checks
+    if [ ! -f "${ASSEMBLY_FASTA}" ]; then echo "Error: Assembly FASTA file (-a) not found: ${ASSEMBLY_FASTA}"; exit 1; fi
+    if [ ! -f "${CHR_LIST_FILE}" ]; then echo "Error: Chromosome list file (-C) not found: ${CHR_LIST_FILE}"; exit 1; fi
+    if [ ! -f "${PLS_LIST_FILE}" ]; then echo "Error: Plasmid list file (-P) not found: ${PLS_LIST_FILE}"; exit 1; fi
+fi
+
+echo "All required input files found."
+# --- Check Tool Dependencies ---
+command -v bwa >/dev/null 2>&1 || { echo >&2 "Error: bwa not found in PATH."; exit 1; }
+command -v samtools >/dev/null 2>&1 || { echo >&2 "Error: samtools not found in PATH."; exit 1; }
+command -v Rscript >/dev/null 2>&1 || { echo >&2 "Error: Rscript not found in PATH."; exit 1; }
+# Assuming the R script is in the same directory or in PATH
+RSCRIPT_PATH=$(command -v PCNE.R || echo "./PCNE.R")
+if [ ! -f "${RSCRIPT_PATH}" ]; then echo >&2 "Error: R script not found: ${RSCRIPT_PATH}"; exit 1; fi
+
+# --- Define Output File Names ---
+COMBINED_REF="${OUTPUT_PREFIX}_combined_reference.fasta"
+SORTED_BAM="${OUTPUT_PREFIX}_alignment.sorted.bam"
+COVERAGE_SUMMARY="${OUTPUT_PREFIX}_coverage_summary.txt"
+FINAL_REPORT_TSV="${OUTPUT_PREFIX}_pcne.tsv"
+
+echo "--- Starting Plasmid Copy Number Estimation ---"
+echo "Input Mode: ${MODE}" 
+# Print mode-specific inputs
+if [[ ${MODE} -eq 1 ]]; then
+    echo "Chromosome FASTA (-c): ${CHR_FASTA}"
+    echo "Plasmid FASTA    (-p): ${PLS_FASTA}"
+elif [[ ${MODE} -eq 2 ]]; then
+    echo "Assembly FASTA   (-a): ${ASSEMBLY_FASTA}"
+    echo "Chromosome List  (-C): ${CHR_LIST_FILE}"
+    echo "Plasmid List     (-P): ${PLS_LIST_FILE}"
+fi
+
+# Print common inputs (these are always required)
+echo "Reads R1         (-r1): ${READS_R1}"
+echo "Reads R2         (-r2): ${READS_R2}"
+echo "Threads          (-t): ${THREADS}"
+echo "Output Prefix    (-o): ${OUTPUT_PREFIX}"
+echo "-----------------------------------------------"
+
+# --- Workflow Steps ---
+# Step 1: Create Combined Reference (Conditional based on MODE)
+echo "[Step 1/7] Creating combined reference..."
+
+if [[ ${MODE} -eq 1 ]]; then
+    # --- Mode 1: Concatenate separate files ---
+    echo "Mode 1: Concatenating ${CHR_FASTA} and ${PLS_FASTA}..."
+    cat "${CHR_FASTA}" "${PLS_FASTA}" > "${COMBINED_REF}"
+    # Basic check for success
+    if [ $? -ne 0 ]; then
+        echo "Error: Failed to concatenate input FASTA files." >&2
+        exit 1
+    fi
+    echo "Done creating combined reference: ${COMBINED_REF}"
+
+elif [[ ${MODE} -eq 2 ]]; then
+    COMBINED_REF="${ASSEMBLY_FASTA}" # Use the provided assembly directly
+    echo "Reference for alignment set to: ${COMBINED_REF}"
+
+else
+    # This case should ideally not be reached if argument validation is robust
+    echo "Error: Invalid mode detected (${MODE}) before reference creation. Exiting." >&2
+    exit 1
+fi
+
+# 2) bwa index
+echo "[Step 2/7] Indexing combined reference..."
+bwa index "${COMBINED_REF}"
+echo "Done."
+
+# 3) bwa mem > .bam (via samtools view)
+echo "[Step 3/7] Aligning reads with BWA-MEM..."
+# Intermediate BAM file (unsorted)
+UNSORTED_BAM="${OUTPUT_PREFIX}_alignment.unsorted.bam"
+bwa mem -t ${THREADS} "${COMBINED_REF}" "${READS_R1}" "${READS_R2}" | \
+  samtools view -@ ${THREADS} -Sb -o "${UNSORTED_BAM}"
+echo "Done."
+
+# 4) samtools sort > sorted.bam
+echo "[Step 4/7] Sorting BAM file: ${SORTED_BAM}"
+samtools sort -@ ${THREADS} -o "${SORTED_BAM}" "${UNSORTED_BAM}"
+rm "${UNSORTED_BAM}" # Remove intermediate unsorted BAM
+echo "Done."
+
+# 5) samtools index sorted.bam
+echo "[Step 5/7] Indexing sorted BAM file..."
+samtools index -@ ${THREADS} "${SORTED_BAM}"
+echo "Done."
+
+# 6) samtools coverage sorted-bam > sample_name_coverage.txt
+echo "[Step 6/7] Calculating coverage: ${COVERAGE_SUMMARY}"
+samtools coverage "${SORTED_BAM}" -o "${COVERAGE_SUMMARY}"
+echo "Done."
+
+# 7) R script to read .txt, extract coverage data, calculate, and output a .tsv file
+echo "[Step 7/7] Preparing contig lists and calculating copy numbers..."
+# Define variables for paths to be passed to R
+chr_name_list_arg=""
+pls_name_list_arg=""
+# Define potential temporary filenames
+local tmp_chr_list="${OUTPUT_PREFIX}_chr_names.tmp"
+local tmp_pls_list="${OUTPUT_PREFIX}_pls_names.tmp"
+
+# Prepare list file paths based on mode
+if [[ ${MODE} -eq 1 ]]; then
+    echo "Extracting chromosome names from ${CHR_FASTA}..."
+    grep '^>' "${CHR_FASTA}" | sed 's/>//; s/ .*//' > "${tmp_chr_list}"
+    if [ ! -s "${tmp_chr_list}" ]; then echo "Warning: Failed to extract chromosome names from ${CHR_FASTA}, or file was empty." >&2; fi
+    chr_name_list_arg="${tmp_chr_list}" # R gets the temp file
+
+    echo "Extracting plasmid names from ${PLS_FASTA}..."
+    grep '^>' "${PLS_FASTA}" | sed 's/>//; s/ .*//' > "${tmp_pls_list}"
+    if [ ! -s "${tmp_pls_list}" ]; then echo "Error: Failed to extract plasmid names from ${PLS_FASTA}, or file was empty." >&2; rm -f $tmp_chr_list; exit 1; fi
+    pls_name_list_arg="${tmp_pls_list}" # R gets the temp file
+
+elif [[ ${MODE} -eq 2 ]]; then
+    echo "Using chromosome names from ${CHR_LIST_FILE}..."
+    chr_name_list_arg="${CHR_LIST_FILE}" # R gets the user-provided file
+
+    echo "Using plasmid names from ${PLS_LIST_FILE}..."
+    pls_name_list_arg="${PLS_LIST_FILE}" # R gets the user-provided file
+else
+     echo "Error: Invalid mode (${MODE}) before R script call." >&2; exit 1;
+fi
+
+# Call R script with paths to chromosome list and plasmid list files
+echo "Running R script..."
+Rscript "${RSCRIPT_PATH}" "${COVERAGE_SUMMARY}" "${chr_name_list_arg}" "${pls_name_list_arg}" "${FINAL_REPORT_TSV}"
+R_EXIT_CODE=$? # Capture R script exit code
+
+# Clean up temporary list files if they were created in Mode 1
+if [[ ${MODE} -eq 1 ]]; then
+    echo "Cleaning up temporary list files..."
+    rm -f "${tmp_chr_list}" "${tmp_pls_list}"
+fi
+
+# Check R script exit code
+if [ ${R_EXIT_CODE} -ne 0 ]; then
+     echo "Error: R script failed with exit code ${R_EXIT_CODE}." >&2
+     exit 1
+fi
+
+echo "Done. Final report: ${FINAL_REPORT_TSV}"
+
+echo "--- Workflow Complete ---"
+
+exit 0

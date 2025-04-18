@@ -1,4 +1,4 @@
-{% set name = "plasmid-copy-estimator" %}
+{% set name = "pcne" %}
 {% set version = "0.1.0" %} # Start with an initial version
 
 package:
@@ -19,8 +19,6 @@ build:
   # 'noarch: generic' means this package can run on any OS/architecture
   # because it only contains scripts (not compiled code).
   noarch: generic
-  # This script will be executed by conda-build
-  script: "bash build.sh"
 
 requirements:
   # Host requirements are needed during the build process itself.
@@ -28,9 +26,9 @@ requirements:
     - coreutils # Provides 'install' command often used in build.sh (good practice)
   # Run requirements are needed to actually run your tool.
   run:
-    - bash # Your main script is a bash script
-    - bwa >=0.7.18 # Example: Specify minimum versions if important
-    - samtools >=1.2
+    - bash 
+    - bwa >=0.7.19 
+    - samtools >=1.20 # Required for the main script
     - r-base >=4.4.2 # Base R environment
     - r-readr >=2.1.5 # R package for reading files
     - r-dplyr >=1.1.4 # R package for data manipulation
@@ -39,19 +37,17 @@ test:
   # These commands will be run by conda-build after installation to check if it worked.
   commands:
     # Check if the main script was installed and is findable in the PATH
-    - command -v plasmid-copy-estimator
+    - command -v pcne
     # Execute the script with the help flag (assuming your script has one or exits cleanly)
-    # You might need to adapt this if your script doesn't have -h
-    - plasmid-copy-estimator -h
+    - pcne -h
 
 about:
-  home: https://github.com/riccabolla/PCN # CHANGE 'your_username'
-  license: MIT # Or your chosen license (e.g., GPL-3.0-only)
-  license_file: ../LICENSE # Path to the license file relative to meta.yaml
-  summary: 'Estimates plasmid copy number relative to chromosome using sequencing reads and Platon output.'
-  dev_url: https://github.com/your_username/PlasmidCopynum # CHANGE 'your_username'
-
+  home: https://github.com/riccabolla/PCNE 
+  license: MIT 
+  license_file: ../LICENSE 
+  summary: 'Estimates plasmid copy number from assembled genome.'
+  dev_url: https://github.com/riccabolla/PCNE 
 # Extra configuration for Bioconda (optional but good practice)
 extra:
   recipe-maintainers:
-    - riccabolla # CHANGE 'your_github_username'
+    - riccabolla 

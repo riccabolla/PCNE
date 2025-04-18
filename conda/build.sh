@@ -14,10 +14,10 @@ mkdir -p $PREFIX/bin
 # into the environment's bin directory ($PREFIX/bin).
 # 'install' is preferred over 'cp' as it can set permissions directly.
 # -m 755 sets read/write/execute permissions for owner, read/execute for group/others (standard for executables)
-install -m 755 bin/plasmid-copy-estimator $PREFIX/bin/
+install -m 755 bin/pcne $PREFIX/bin/
 
 # -m 644 sets read/write for owner, read-only for group/others (standard for non-executable scripts/data)
-install -m 644 bin/calculate_multi_plasmid_cn.R $PREFIX/bin/
+install -m 644 bin/PCNE.R $PREFIX/bin/
 
 echo "Installation script finished."
 echo "Files installed in $PREFIX/bin:"
