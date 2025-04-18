@@ -24,7 +24,7 @@ conda config --set channel_priority strict
 2) **Create a new environment and install:**<br>
 ```
 conda create -n pcne_env pcne
-conda activate plasmid_cn_env
+conda activate pcne_env
 ```
 (Note: Until the package is accepted into Bioconda, you would install from a local build using conda install --use-local plasmid-copy-estimator after building it yourself with conda build conda/)<br>
 ## Dependencies. <br>
@@ -55,15 +55,15 @@ pcne -c <chromosome.fasta> -p <plasmid.fasta> -r <reads_R1.fastq.gz> -R <reads_R
 
 The tool can be run in two different ways: <br>
 **Mode 1**: it require two separate FASTA files for chromosome and plasmid(s). <br>
-*Example Mode 1*
 ```
+#Example Mode 1
 pcne \ 
-  -c platon_output/my_sample.chromosome.fasta \ 
-  -p platon_output/my_sample.plasmid.fasta \ 
-  -r input_reads/my_sample_R1.fastq.gz \ 
-  -R input_reads/my_sample_R2.fastq.gz \ 
+  -c my_sample.chromosome.fasta \ 
+  -p my_sample.plasmid.fasta \ 
+  -r my_sample_R1.fastq.gz \ 
+  -R my_sample_R2.fastq.gz \ 
   -t 8 \ 
-  -o my_sample_copy_num
+  -o my_sample_pcne
 ```
 **Mode 2**: it require an assembled FASTA file, a list file with contig(s) assigned to chromosome, and a list file of contig(s) assigned to plasmid(S).
 The list should be structured as follow:
@@ -72,6 +72,17 @@ plasmid1.fasta
 plasmid2.fasta
 plasmid3.fasta
 ...
+```
+```
+#Example Mode 2
+pcne \ 
+  -a my_sample_assembly.fasta
+  -C chromosome.list
+  -P plasmid.list \ 
+  -r my_sample_R1.fastq.gz \ 
+  -R my_sample_R2.fastq.gz \ 
+  -t 8 \ 
+  -o my_sample_pcne
 ```
 **Note**: if file are not in the working folder, provide the PATH. <br>
 
