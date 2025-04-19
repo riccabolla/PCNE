@@ -7,12 +7,14 @@ package:
 
 source:
   path: ..
-  url: https://github.com/riccabolla/PCNE/archive/refs/tags/{{ version }}.tar.gz
+  url: https://github.com/riccabolla/PCNE/archive/refs/tags/v{{ version }}.tar.gz
   sha256: 2e3f278d378d4f82b6d400b34a6448b8166184676eb98b773a722b2c9be5a1e1
 
 build:
   number: 0 
   noarch: generic
+  run_exports: 
+    - {{ pin_subpackage("pcne", max_pin="x.x") }}
 
 requirements:
   host:
@@ -33,7 +35,7 @@ test:
 about:
   home: https://github.com/riccabolla/PCNE 
   license: MIT 
-  license_file: ../LICENSE 
+  license_file: LICENSE 
   summary: 'Estimates plasmid copy number from assembled genome.'
   dev_url: https://github.com/riccabolla/PCNE 
 extra:
