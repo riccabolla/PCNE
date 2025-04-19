@@ -166,7 +166,7 @@ if [ ! -f "${RSCRIPT_PATH}" ]; then echo >&2 "Error: R script not found: ${RSCRI
 COMBINED_REF="${OUTPUT_PREFIX}_combined_reference.fasta"
 SORTED_BAM="${OUTPUT_PREFIX}_alignment.sorted.bam"
 COVERAGE_SUMMARY="${OUTPUT_PREFIX}_coverage_summary.txt"
-FINAL_REPORT_TSV="${OUTPUT_PREFIX}_pcne.tsv"
+FINAL_REPORT_TSV="${OUTPUT_PREFIX}.tsv"
 
 echo "--- Starting Plasmid Copy Number Estimation ---"
 echo "Input Mode: ${MODE}" 
