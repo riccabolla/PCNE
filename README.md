@@ -16,6 +16,7 @@ This tool automates the process of:<br>
 7) Calculating the estimated copy number for each plasmid contig relative to the average chromosome depth using an R script.<br>
 ## Installation<br>
 [![Static Badge](https://img.shields.io/badge/Install_with-Bioconda-blue)](https://bioconda.github.io/)
+
 The recommended way to install Plasmid Copy Number Estimator is via [BioConda](https://bioconda.github.io/).<br>
 1) **Set up Conda Channels (if not already done):**<br>
 
@@ -105,9 +106,11 @@ Columns: <br>
 * **chromosome_mean_depth**: The single, length-weighted average depth calculated across all chromosomal contigs.<br>
 * **estimated_copy_number**: The calculated copy number (mean_depth / chromosome_mean_depth).<br>
 
-**License**<br>
-This project is licensed under the MIT License - see the LICENSE file for details.<br>
-**Contact** <br>
+### **License**<br>
+This project is licensed under the MIT License - see the [LICENSE](https://github.com/riccabolla/PCNE/blob/main/LICENSE) file for details.<br>
+
+### **Contact** <br>
 riccardo.bollini@hunimed.eu <br>
-**Issues**<br>
-Please report any issues or suggestions via the GitHub Issues page.<br>
+
+### **Issues**<br>
+Please report any issues or suggestions via the GitHub [Issues](https://github.com/riccabolla/PCNE/issues) page.<br>
