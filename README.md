@@ -1,9 +1,10 @@
 ![Static Badge](https://img.shields.io/badge/License-MIT-blue)
-![Static Badge](https://img.shields.io/badge/Version-0.1.0-blue)
+![Static Badge](https://img.shields.io/badge/Version-0.1.1-blue)
 
 # Plasmid Copy Number Estimator
 **P**lasmid **C**opy **N**umber **E**stimator (**PCNE**) is a simple tool to estimate the copy number of plasmid from an assembled genome. <br>
-Note: ⚠️ This tool is currently in its early development stage (v0.1.1). While functional for its core purpose, the command-line interface or underlying methods might evolve in future releases (listed [here](#Next-features)). Please report any issues or suggestions!
+## ⚠️ Warning⚠️ 
+This tool is currently in its early development stage (v0.1.1). While functional for its core purpose, the command-line interface or underlying methods might evolve in future releases (listed [here](#Next-features)). Please report any issues or suggestions!
 ## Disclaimer
 This tool requires a previous step of plasmid identification using tools like Platon (recommended), MOB-Suite, PlasmidFinder... <br>
 ## Introduction
@@ -15,8 +16,7 @@ This tool automates the process of:<br>
 5) Calculating per-contig coverage using samtools coverage. <br>
 6) Calculating the length-weighted average depth of chromosome contigs.<br>
 7) Calculating the estimated copy number for each plasmid contig relative to the average chromosome depth using an R script.<br>
-## Installation<br>
-
+## Installation
 ### Bioconda [![Static Badge](https://img.shields.io/badge/Install_with-Bioconda-blue)](https://bioconda.github.io/)
 
 The recommended way to install Plasmid Copy Number Estimator will be via [BioConda](https://bioconda.github.io/) once approved.<br>
@@ -41,17 +41,19 @@ git clone https://github.com/riccabolla/PCNE.git
 cd PCNE/
 ```
 (Note: While the Bioconda submission is pending, you can install it from your local build using `conda install --use-local pcne` after building it yourself with `conda build conda/`)
-## Dependencies. <br>
+## Dependencies
 The tool relies on the following softwares, which will be installed automatically by Conda:<br>
 1) **BWA** (>=0.7.18 recommended)<br>
 2) **Samtools** (>=1.2 recommended)<br>
 3) **R** (>=4.4.2 recommended)<br>
 4) **R Packages**: readr (>=2.1.5), dplyr (>=1.1.4)<br>
-## Usage<br>
+## Requirements
+This tool requires a previous step of plasmid identification using tools like Platon (recommended), MOB-Suite, PlasmidFinder...
+## Usage
 ```
 pcne -c <chromosome.fasta> -p <plasmid.fasta> -r <reads_R1.fastq.gz> -R <reads_R2.fastq.gz> [-t <threads>] [-o <output_prefix>]
 ```
-## Command line options: <br>
+## Command line options
 ```
 Mode 1:
 -c FILE       Path to chromosome contigs FASTA file (mode 1)
