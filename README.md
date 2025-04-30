@@ -1,21 +1,20 @@
 ![Static Badge](https://img.shields.io/badge/License-MIT-blue)
-![Static Badge](https://img.shields.io/badge/Version-0.1.1-blue)
+![Static Badge](https://img.shields.io/badge/version-0.2.0-blue)
 
 # Plasmid Copy Number Estimator
 **P**lasmid **C**opy **N**umber **E**stimator (**PCNE**) is a simple tool to estimate the copy number of plasmid from an assembled genome. <br>
 ## ⚠️ Warning⚠️ 
-This tool is currently in its early development stage (v0.1.1). While functional for its core purpose, the command-line interface or underlying methods might evolve in future releases (listed [here](#Next-features)). Please report any issues or suggestions!
+This tool is currently in its early development stage (v0.2.0). While functional for its core purpose, it will receive updates often, including additional features, bug fixing... (for more information see [here](#Next-features)). Please report any issues or suggestions!
 ## Disclaimer
 This tool requires a previous step of plasmid identification using tools like Platon (recommended), MOB-Suite, PlasmidFinder... <br>
 ## Introduction
-This tool automates the process of:<br>
-1) Creating a combined reference from chromosome and plasmid contigs.<br>
-2) Indexing the reference using BWA.<br>
-3) Aligning paired-end sequencing reads to the combined reference using BWA-MEM.<br>
-4) Sorting and indexing the resulting alignment (BAM file) using Samtools.<br>
-5) Calculating per-contig coverage using samtools coverage. <br>
-6) Calculating the length-weighted average depth of chromosome contigs.<br>
-7) Calculating the estimated copy number for each plasmid contig relative to the average chromosome depth using an R script.<br>
+Determining the copy number of plasmids relative to the host chromosome is essential for understanding plasmid biology, evolution, and the dosage of plasmid-borne genes (e.g., antimicrobial resistance genes). PCNE automates this estimation from standard bioinformatics file formats. <br>
+### Key features
+* **Flexible input**: Accepts either pre-separated chromosome and plasmid FASTA files or a complete genome assembly FASTA with corresponding contig lists. It also allows to use as plasmid input a multi-fasta file with one contig per plasmid, a complete assembled plasmid (1 contig), or a draft assembled plasmid (one plasmid with multiple contigs). 
+* **Multiple normalization**: To assess baseline coverage depth, it allows for a standard length-weighted average coverage of all designated chromosomal contigs or a more precise normalization using single-copy core genes identified bu BUSCO. 
+* **Alignment Filtering**: Allow to filter alignments based on mapping quality and SAM flags before coverage calculation, helping to remove ambiguous or low-quality mappings.
+* **Visualization**: Optionally generates a bar plot visualizing the estimated copy numbers for each plasmid
+
 ## Installation
 ### Bioconda [![Static Badge](https://img.shields.io/badge/Install_with-Bioconda-blue)](https://bioconda.github.io/)
 
@@ -34,7 +33,7 @@ conda create -n pcne_env -c conda-forge -c bioconda pcne
 conda activate pcne_env
 ```
 ### Source
-Clone this repository to install the latest version direct from GitHUB
+Clone this repository to install the latest version direct from GitHub
 ```
 cd $HOME
 git clone https://github.com/riccabolla/PCNE.git 
@@ -45,8 +44,10 @@ cd PCNE/
 The tool relies on the following softwares, which will be installed automatically by Conda:<br>
 1) **BWA** (>=0.7.18 recommended)<br>
 2) **Samtools** (>=1.2 recommended)<br>
-3) **R** (>=4.4.2 recommended)<br>
-4) **R Packages**: readr (>=2.1.5), dplyr (>=1.1.4)<br>
+3) **Busco** (=5.8.2)
+4) **bedtools** (>=2.31.1)
+5) **R** (>=4.4.2 recommended)<br>
+6) **R Packages**: readr (>=2.1.5), dplyr (>=1.1.4), ggplot2(>=3.5.1)<br>
 ## Requirements
 This tool requires a previous step of plasmid identification using tools like Platon (recommended), MOB-Suite, PlasmidFinder...
 ## Usage
@@ -55,22 +56,25 @@ pcne -c <chromosome.fasta> -p <plasmid.fasta> -r <reads_R1.fastq.gz> -R <reads_R
 ```
 ## Command line options
 ```
-Mode 1:
--c FILE       Path to chromosome contigs FASTA file (mode 1)
--p FILE       Path to plasmid contigs FASTA file (mode 1)
-Mode 2:
--a FILE       Path to assembled genome (FASTA file) (mode 2)
--C FILE       Path to the chromosome contigs list (mode 2)
--P FILE       Path to the plasmid contigs list (mode 2)
-Required:
--r FILE       Path to forward reads (FASTQ format, can be gzipped) [Required] 
--R FILE       Path to reverse reads (FASTQ format, can be gzipped) [Required] 
-Optional:
--t INT        Number of threads to use for alignment and sorting (default: 6) [Optional] 
--o STR        Prefix for output files (default: pcne_result) [Optional] 
--k            Keep intermediate files (BAM, BAI, BWA index) [Default: off]
--v            Display version 
--h            Display command help message
+  -c, --chromosome FILE      Path to chromosome FASTA file (Required)  
+  -p, --plasmid FILE         Path to plasmid FASTA file (Required)  
+                             Use with `--single-plasmid` if file contains one fragmented plasmid  
+  -a, --assembly FILE        Path to the assembled genome FASTA file (Required)  
+  -C, --chr-list FILE        Path to file containing chromosome contig names (Required)  
+  -P, --plasmid-list FILE    Path to file containing plasmid contig names (Required)  
+  -r, --reads1 FILE          Path to forward reads (FASTQ) (Mandatory)  
+  -R, --reads2 FILE          Path to reverse reads (FASTQ) (Mandatory)  
+  -b, --busco                Activate BUSCO SCG normalization (default: OFF)  
+  -L, --busco-lineage STR    BUSCO lineage dataset name (default: <BUSCO_LINEAGE>)  
+  -Q, --min-quality INT      Minimum mapping quality (MQ) for read filtering (default: <MIN_MAPQ>)  
+  -F, --filter INT           SAM flag to exclude reads (default: <SAM_FILTER_FLAG>)  
+  -l, --plot                 Generate a plot of estimated copy numbers (<prefix>_plot.png)  
+  -s, --single-plasmid       Treat all contigs in `-p` FASTA as one fragmented plasmid (Mode 1 only)  
+  -t, --threads INT          Number of threads to use (default: <THREADS>)  
+  -o, --output STR           Prefix for output files (default: <OUTPUT_PREFIX>)  
+  -k, --keep-intermediate    Keep intermediate files (default: OFF)  
+  -v, --version              Show version information  
+  -h, --help                 Show help message 
 ```
 
 # Run the tool
@@ -98,8 +102,8 @@ plasmid3_contig
 ```
 #Example Mode 2
 pcne \ 
-  -a my_sample_assembly.fasta
-  -C chromosome.list
+  -a my_sample_assembly.fasta \
+  -C chromosome.list \
   -P plasmid.list \ 
   -r my_sample_R1.fastq.gz \ 
   -R my_sample_R2.fastq.gz \ 
@@ -108,28 +112,25 @@ pcne \
 ```
 **Note**: if files are not in the working folder, provide the PATH. <br>
 
-The tool generates several intermediate files (reference, index files, BAM file, coverage summary). <br>
-For both modes the main output is a `TSV` file.
-Example output.tsv: <br>
-| plasmid_contig |length | mean_depth |chromosome_mean_depth |estimated_copy_number |
-| ---------------|-------|------------|----------------------|----------------------|
-|plasmid_contig_ 1|54321 |152.75|31.45|4.86|
-|plasmid_contig_2_IncFIB|9876|28.50|31.45|0.91|
+For both modes the main output is a `TSV` file. <br>
+Example `output.tsv`: <br>
+| plasmid_contig |length | mean_depth |baseline_mean_depth|normalization_mode|estimated_copy_number |
+|||||||
+|plasmid_contig_ 1|54321 |152.75|31.45|BUSCO_SCG|4.86|
+|plasmid_contig_2_IncFIB|9876|28.50|31.45|BUSCO_SCG|0.91|
 |...|...|...|...|...| 
 
 Columns: <br>
 * **plasmid_contig**: Name of the plasmid contig (from the input plasmid FASTA).<br>
 * **length**: Length of the plasmid contig in base pairs.<br>
 * **mean_depth**: Average sequencing depth calculated for this plasmid contig.<br>
-* **chromosome_mean_depth**: The single, length-weighted average depth calculated across all chromosomal contigs.<br>
-* **estimated_copy_number**: The calculated copy number (mean_depth / chromosome_mean_depth).<br>
+* **baseline_mean_depth**: Baseline coverage depth.<br>
+* **normalization mdoe**: how baseline coverage depth was calculated <br>
+* **estimated_copy_number**: The calculated copy number (mean_depth / baseline_mean_depth).<br>
 
 ## <a name="Next-features"></a>Next features
 ### Major updates
-* Add an option to perform a more accurate copy number estimation: <br> 
-  The idea is to allow user to use single-gene copy selected from input chromosome as baseline, instead of whole chrosomome. This should improve accuracy, avoiding coverage bias from misassembled or high-variation regions in chromsosomes.  
-### Minor updates
-* Add `--plot` option, to create a simple barplot with estimated plasmid copy numbers.
+* GC normalization
 
 ### **License**<br>
 This project is licensed under the MIT License - see the [LICENSE](https://github.com/riccabolla/PCNE/blob/main/LICENSE) file for details.<br>
