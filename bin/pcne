@@ -1,16 +1,12 @@
 #!/usr/bin/env bash
 
-# PCNE: Plasmid Copy Number Estimator v0.1.1
+VERSION="0.2.0"
 
-# --- Script Version ---
-VERSION="0.1.1"
-
-# Exit script on error
+# --- Script Behavior ---
 set -e
-# Exit on pipe failures
 set -o pipefail
 
-# --- Banner ---
+# --- Print Banner ---
 cat << "EOF"
 
    ____   ____ _   _ ____
@@ -18,28 +14,31 @@ cat << "EOF"
   | |_) | |   |  \| |  _|
   |  __/| |___| |\  | |___
   |_|    \____|_| \_|_____|
-  Plasmid Copy Number Estimator v0.1.1 
+  Plasmid Copy Number Estimator v0.2.0
   by riccabolla
-
 EOF
-# --- Define Colors ---
-RESET='\e[0m'
+
+RESET=$'\033[0m' 
 GREEN='\e[0;32m'
 RED_BOLD='\e[1;31m'
 YELLOW_BOLD='\e[1;33m'
-BLUE_BOLD='\e[1;34m'
+BLUE_BOLD=$'\033[1;34m' 
 MAGENTA='\e[0;35m'
 CYAN_BOLD='\e[1;36m'
 
-# --- Record Start Time ---
 start_time=$(date +%s)
 
-# --- Default Values ---
-THREADS=1 
-OUTPUT_PREFIX="pcne" 
-KEEP_INTERMEDIATE=0 
+THREADS=1
+OUTPUT_PREFIX="pcne"
+KEEP_INTERMEDIATE=0
+RUN_BUSCO=0
+BUSCO_MODE="genome"
+BUSCO_LINEAGE="bacteria_odb12"
+MIN_MAPQ=0
+SAM_FILTER_FLAG=0
+GENERATE_PLOT=0
+AGGREGATE_PLASMIDS=0 
 
-# Initialize file path variables
 CHR_FASTA=""
 PLS_FASTA=""
 ASSEMBLY_FASTA=""
@@ -48,14 +47,12 @@ PLS_LIST_FILE=""
 READS_R1=""
 READS_R2=""
 
-# Initialize mode variables
-MODE=0 # 0=Undetermined, 1=Separate Files, 2=Assembly+Lists
+MODE=0 
+NORM_MODE="Chromosome"
 
-# --- Find the location of the accompanying R script ---
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
-RSCRIPT_PATH="${SCRIPT_DIR}/PCNE.R"
+RSCRIPT_PATH="${SCRIPT_DIR}/PCNE.R" 
 
-# Check R script location 
 if [ ! -f "${RSCRIPT_PATH}" ]; then
     echo -e "${RED_BOLD}Error: R script not found at expected location: ${RSCRIPT_PATH}${RESET}" >&2
     RSCRIPT_BASENAME=$(basename "${RSCRIPT_PATH}")
@@ -65,169 +62,216 @@ if [ ! -f "${RSCRIPT_PATH}" ]; then
          exit 1
     else
          echo -e "${YELLOW_BOLD}Warning: Using R script found via PATH: ${RSCRIPT_PATH_FALLBACK}. Installation might be incomplete or incorrect.${RESET}" >&2
-         RSCRIPT_PATH="${RSCRIPT_PATH_FALLBACK}" 
+         RSCRIPT_PATH="${RSCRIPT_PATH_FALLBACK}"
     fi
 fi
 
-# --- Usage ---
 usage() {
   local script_name=$(basename "$0")
   echo -e "${BLUE_BOLD}Usage:${RESET}"
-  echo -e "  ${script_name} [Mode 1] OR [Mode 2] [Common Required] [Optional]"
-  echo -e "\n  ${BLUE_BOLD}Mode 1:${RESET}"
-  echo "    -c FILE : Path to chromosome contigs FASTA file (Required)"
-  echo "    -p FILE : Path to plasmid contigs FASTA file (Required)"
-  echo -e "\n  ${BLUE_BOLD}Mode 2:${RESET}"
-  echo "    -a FILE : Path to the assembled genome FASTA file (Required)"
-  echo "    -C FILE : Path to file containing chromosome contig names (Required)"
-  echo "    -P FILE : Path to file containing plasmid contig names (Required)"
+  echo -e "  ${script_name} [Mode 1 | Mode 2] [Common Required] [Optional]"
+  echo -e "    ${CYAN_BOLD}Mode 1:${RESET}"
+  echo "      -c, --chromosome FILE : Path to chromosome FASTA file (Required)"
+  echo "      -p, --multi-plasmid FILE : Path to plasmid FASTA file (Required, assumes)"
+  echo "                                (Use with --single-plasmid if file contains one fragmented plasmid)"
+  echo -e "    ${CYAN_BOLD}Mode 2:${RESET}"
+  echo "      -a, --assembly FILE   : Path to the assembled genome FASTA file (Required)"
+  echo "      -C, --chr-list FILE   : Path to file containing chromosome contig names (Required)"
+  echo "      -P, --plasmid-list FILE : Path to file containing plasmid contig names (Required)"
   echo -e "\n  ${BLUE_BOLD}Common Required:${RESET}"
-  echo "    -r FILE : Path to forward reads (FASTQ format, e.g., R1) (Mandatory)"
-  echo "    -R FILE : Path to reverse reads (FASTQ format, e.g., R2) (Mandatory)"
-  echo -e "\n  ${BLUE_BOLD}Optional:${RESET}"
-  echo "    -t INT  : Number of threads (default: ${THREADS})"
-  echo "    -o STR  : Prefix for output files (default: ${OUTPUT_PREFIX})"
-  echo "    -k      : Keep intermediate files (BAM, BAI, BWA index) [Default: Remove]"
-  echo "    -v      : Display version information and exit"
-  echo "    -h      : Display this help message and exit"
+  echo "    -r, --reads1 FILE     : Path to forward reads (FASTQ) (Mandatory)"
+  echo "    -R, --reads2 FILE     : Path to reverse reads (FASTQ) (Mandatory)"
+  echo -e "\n  ${BLUE_BOLD}Normalization:${RESET}"
+  echo "    -b, --busco           : Activate BUSCO SCG normalization (deafult: OFF)"
+  echo "    -L, --busco-lineage STR : BUSCO lineage dataset name (default: ${BUSCO_LINEAGE})"
+  echo -e "\n  ${BLUE_BOLD}Optional Filtering & Plotting:${RESET}"
+  echo "    -Q, --min-quality INT : Minimum mapping quality (MQ) for read filtering (default: ${MIN_MAPQ})"
+  echo "    -F, --filter INT      : SAM flag to exclude reads (default: ${SAM_FILTER_FLAG})"
+  echo "    -l, --plot            : Plot of estimated copy numbers (<prefix>_plot.png)"
+  echo -e "\n  ${BLUE_BOLD}Other Optional:${RESET}"
+  echo "    -s, --single-plasmid  : Treat all contigs in '-p' FASTA as one fragmented plasmid (Mode 1 only)" 
+  echo "    -t, --threads INT     : Number of threads (default: ${THREADS})"
+  echo "    -o, --output STR      : Prefix for output files (default: ${OUTPUT_PREFIX})"
+  echo "    -k, --keep-intermediate : Keep intermediate files [Default: OFF]"
+  echo "    -v, --version         : Version"
+  echo "    -h, --help            : Help"
 }
 
-# --- Command-Line Arguments ---
-while getopts ":a:c:p:C:P:r:R:t:o:hkv" opt; do
-  case ${opt} in
-    a ) ASSEMBLY_FASTA=$OPTARG ;;
-    c ) CHR_FASTA=$OPTARG ;;
-    p ) PLS_FASTA=$OPTARG ;;
-    C ) CHR_LIST_FILE=$OPTARG ;;
-    P ) PLS_LIST_FILE=$OPTARG ;;
-    r ) READS_R1=$OPTARG ;;
-    R ) READS_R2=$OPTARG ;;
-    t ) THREADS=$OPTARG ;;
-    o ) OUTPUT_PREFIX=$OPTARG ;;
-    k ) KEEP_INTERMEDIATE=1 ;; 
-    v ) echo "$(basename "$0") version ${VERSION}"; exit 0 ;; 
-    h ) usage; exit 0 ;;
-    \? ) echo -e "${RED_BOLD}Error: Invalid option: -$OPTARG${RESET}" >&2; usage; exit 1 ;;
-    : ) echo -e "${RED_BOLD}Error: Option -$OPTARG requires an argument.${RESET}" >&2; usage; exit 1 ;;
-  esac
+OPTIND=1
+TEMP_ARGS=()
+while [[ $# -gt 0 ]]; do
+    key="$1"
+    case ${key} in
+        -c|--chromosome) CHR_FASTA="$2"; shift 2 ;;
+        -p|--multi-plasmid) PLS_FASTA="$2"; shift 2 ;;
+        -a|--assembly) ASSEMBLY_FASTA="$2"; shift 2 ;;
+        -C|--chr-list) CHR_LIST_FILE="$2"; shift 2 ;;
+        -P|--plasmid-list) PLS_LIST_FILE="$2"; shift 2 ;;
+        -r|--reads1) READS_R1="$2"; shift 2 ;;
+        -R|--reads2) READS_R2="$2"; shift 2 ;;
+        -t|--threads) THREADS="$2"; shift 2 ;;
+        -o|--output) OUTPUT_PREFIX="$2"; shift 2 ;;
+        -L|--busco-lineage) BUSCO_LINEAGE="$2"; shift 2 ;;
+        -Q|--min-quality) MIN_MAPQ="$2"; shift 2 ;;
+        -F|--filter) SAM_FILTER_FLAG="$2"; shift 2 ;;
+        -b|--busco) RUN_BUSCO=1; shift ;;
+        -k|--keep-intermediate) KEEP_INTERMEDIATE=1; shift ;;
+        -l|--plot) GENERATE_PLOT=1; shift ;;
+        -s|--single-plasmid) AGGREGATE_PLASMIDS=1; shift ;; # New flag
+        -v|--version) echo "$(basename "$0") version ${VERSION}"; exit 0 ;;
+        -h|--help) usage; exit 0 ;;
+        *) echo -e "${RED_BOLD}Error: Unknown option or argument: $1${RESET}" >&2; usage; exit 1; ;;
+    esac
 done
-shift $((OPTIND -1))
 
-# --- Output File Names ---
 LOG_FILE="${OUTPUT_PREFIX}.log"
-COMBINED_REF="${OUTPUT_PREFIX}_combined_reference.fasta" 
-ALIGNMENT_REF="" 
+COMBINED_REF="${OUTPUT_PREFIX}_combined_reference.fasta"
+ALIGNMENT_REF=""
 SORTED_BAM="${OUTPUT_PREFIX}_alignment.sorted.bam"
-COVERAGE_SUMMARY="${OUTPUT_PREFIX}_coverage_summary.full.txt" 
+FILTERED_BAM="${OUTPUT_PREFIX}_alignment.filtered.bam"
+COVERAGE_SUMMARY="${OUTPUT_PREFIX}_coverage_summary.full.txt"
 FINAL_REPORT_TSV="${OUTPUT_PREFIX}_results.tsv"
-
-# Temporary file names
+PLOT_FILE="${OUTPUT_PREFIX}_plot.png"
 chr_name_list_arg=""
 pls_name_list_arg=""
 tmp_chr_list="${OUTPUT_PREFIX}_chr_names.tmp"
 tmp_pls_list="${OUTPUT_PREFIX}_pls_names.tmp"
+tmp_chrom_for_busco="${OUTPUT_PREFIX}_chrom_for_busco.tmp.fasta"
+busco_out_dir="${OUTPUT_PREFIX}_busco_out"
+scg_bed_file="${OUTPUT_PREFIX}_scg_regions.bed"
+scg_cov_file="${OUTPUT_PREFIX}_scg_coverage.tsv"
+plasmid_coverage_data_tmp="${OUTPUT_PREFIX}_plasmid_coverage.tmp"
 
-# --- Log File ---
 echo "PCNE Log File - v${VERSION}" > "${LOG_FILE}"
 echo "Start Time: $(date)" >> "${LOG_FILE}"
-cmd_line_args=$(printf " %q" "$@")
-original_args_string_placeholder="<<User provided args here>>" 
-echo "Command: $(basename "$0") ${original_args_string_placeholder} ${cmd_line_args}" >> "${LOG_FILE}"
+echo "Command: $(basename "$0") ..." >> "${LOG_FILE}" 
 echo "--------------------" >> "${LOG_FILE}"
 
-# --- Argument Validation Logic ---
-if [[ -n "${CHR_FASTA}" && -n "${PLS_FASTA}" ]]; then
+
+if [[ $RUN_BUSCO -eq 1 ]]; then
+    NORM_MODE="BUSCO_SCG"
+    if [[ -n "${CHR_FASTA}" && (-n "${PLS_FASTA}" || -n "${PLS_LIST_FILE}") ]]; then MODE=1;
+    elif [[ -n "${ASSEMBLY_FASTA}" && -n "${CHR_LIST_FILE}" && -n "${PLS_LIST_FILE}" ]]; then MODE=2;
+    else echo -e "${RED_BOLD}Error: BUSCO normalization (-b) requires either Mode 1 (-c, -p/-P) or Mode 2 (-a, -C, -P) input arguments.${RESET}" >&2; usage; exit 1; fi
+    if [[ ${MODE} -eq 1 && (-n "${ASSEMBLY_FASTA}" || -n "${CHR_LIST_FILE}") ]]; then echo -e "${RED_BOLD}Error: Cannot use -a or -C when using -b with -c.${RESET}" >&2; usage; exit 1; fi
+    if [[ ${MODE} -eq 2 && (-n "${CHR_FASTA}" || -n "${PLS_FASTA}") ]]; then echo -e "${RED_BOLD}Error: Cannot use -c or -p when using -b with -a/-C/-P.${RESET}" >&2; usage; exit 1; fi
+    if [[ ${MODE} -eq 1 && -z "${PLS_FASTA}" && -z "${PLS_LIST_FILE}" ]]; then echo -e "${RED_BOLD}Error: BUSCO normalization (-b) with -c requires a plasmid source (-p or -P).${RESET}" >&2; usage; exit 1; fi
+elif [[ -n "${CHR_FASTA}" && -n "${PLS_FASTA}" ]]; then # Mode 1, default norm
     if [[ -n "${ASSEMBLY_FASTA}" || -n "${CHR_LIST_FILE}" || -n "${PLS_LIST_FILE}" ]]; then echo -e "${RED_BOLD}Error: Conflicting arguments. Cannot use -c/-p together with -a/-C/-P.${RESET}" >&2; usage; exit 1; fi
-    MODE=1
-elif [[ -n "${ASSEMBLY_FASTA}" && -n "${CHR_LIST_FILE}" && -n "${PLS_LIST_FILE}" ]]; then
+    MODE=1; NORM_MODE="Chromosome";
+elif [[ -n "${ASSEMBLY_FASTA}" && -n "${CHR_LIST_FILE}" && -n "${PLS_LIST_FILE}" ]]; then # Mode 2, default norm
     if [[ -n "${CHR_FASTA}" || -n "${PLS_FASTA}" ]]; then echo -e "${RED_BOLD}Error: Conflicting arguments. Cannot use -a/-C/-P together with -c/-p.${RESET}" >&2; usage; exit 1; fi
-    MODE=2
+    MODE=2; NORM_MODE="Chromosome";
+else
+    MODE=0
 fi
 if [[ ${MODE} -eq 0 ]]; then echo -e "${RED_BOLD}Error: Invalid or incomplete argument combination for input files.${RESET}" >&2; usage; exit 1; fi
 if [[ -z "${READS_R1}" || -z "${READS_R2}" ]]; then echo -e "${RED_BOLD}Error: Missing mandatory read files (-r and -R).${RESET}" >&2; usage; exit 1; fi
+if ! [[ "$MIN_MAPQ" =~ ^[0-9]+$ ]]; then echo -e "${RED_BOLD}Error: Minimum MAPQ (-Q) must be a non-negative integer.${RESET}" >&2; usage; exit 1; fi
+if ! [[ "$SAM_FILTER_FLAG" =~ ^[0-9]+$ ]]; then echo -e "${RED_BOLD}Error: SAM filter flag (-F) must be a non-negative integer.${RESET}" >&2; usage; exit 1; fi
+if [[ $AGGREGATE_PLASMIDS -eq 1 && $MODE -ne 1 ]]; then echo -e "${RED_BOLD}Error: --single-plasmid (-s) option is only compatible with Mode 1 (-c and -p).${RESET}" >&2; usage; exit 1; fi
+if [[ $AGGREGATE_PLASMIDS -eq 1 && -z "$PLS_FASTA" ]]; then echo -e "${RED_BOLD}Error: --single-plasmid (-s) requires the plasmid FASTA file (-p) as input.${RESET}" >&2; usage; exit 1; fi
 
-# --- Check Input Files ---
+
 echo -e "${MAGENTA}Checking existence of input files...${RESET}" | tee -a "${LOG_FILE}"
+
 if [ ! -f "${READS_R1}" ]; then echo -e "${RED_BOLD}Error: Reads R1 file not found: ${READS_R1}${RESET}" >&2; exit 1; fi
 if [ ! -f "${READS_R2}" ]; then echo -e "${RED_BOLD}Error: Reads R2 file not found: ${READS_R2}${RESET}" >&2; exit 1; fi
-if [[ ${MODE} -eq 1 ]]; then
+if [[ ${MODE} -eq 1 ]]; then 
     if [ ! -f "${CHR_FASTA}" ]; then echo -e "${RED_BOLD}Error: Chromosome FASTA file (-c) not found: ${CHR_FASTA}${RESET}" >&2; exit 1; fi
-    if [ ! -f "${PLS_FASTA}" ]; then echo -e "${RED_BOLD}Error: Plasmid FASTA file (-p) not found: ${PLS_FASTA}${RESET}" >&2; exit 1; fi
-elif [[ ${MODE} -eq 2 ]]; then
+    if [[ -n "${PLS_FASTA}" && ! -f "${PLS_FASTA}" ]]; then echo -e "${RED_BOLD}Error: Plasmid FASTA file (-p) not found: ${PLS_FASTA}${RESET}" >&2; exit 1; fi
+    if [[ -n "${PLS_LIST_FILE}" && ! -f "${PLS_LIST_FILE}" ]]; then echo -e "${RED_BOLD}Error: Plasmid list file (-P) not found: ${PLS_LIST_FILE}${RESET}" >&2; exit 1; fi
+elif [[ ${MODE} -eq 2 ]]; then 
     if [ ! -f "${ASSEMBLY_FASTA}" ]; then echo -e "${RED_BOLD}Error: Assembly FASTA file (-a) not found: ${ASSEMBLY_FASTA}${RESET}" >&2; exit 1; fi
     if [ ! -f "${CHR_LIST_FILE}" ]; then echo -e "${RED_BOLD}Error: Chromosome list file (-C) not found: ${CHR_LIST_FILE}${RESET}" >&2; exit 1; fi
     if [ ! -f "${PLS_LIST_FILE}" ]; then echo -e "${RED_BOLD}Error: Plasmid list file (-P) not found: ${PLS_LIST_FILE}${RESET}" >&2; exit 1; fi
 fi
 echo -e "${GREEN}All required input files found.${RESET}" | tee -a "${LOG_FILE}"
 
-# --- Check Tool Dependencies ---
+
 echo -e "${MAGENTA}Checking dependencies...${RESET}" | tee -a "${LOG_FILE}"
 command -v bwa >/dev/null 2>&1 || { echo -e >&2 "${RED_BOLD}Error: bwa not found in PATH.${RESET}"; exit 1; }
 command -v samtools >/dev/null 2>&1 || { echo -e >&2 "${RED_BOLD}Error: samtools not found in PATH.${RESET}"; exit 1; }
 command -v Rscript >/dev/null 2>&1 || { echo -e >&2 "${RED_BOLD}Error: Rscript not found in PATH.${RESET}"; exit 1; }
-command -v awk >/dev/null 2>&1 || { echo -e >&2 "${RED_BOLD}Error: awk not found in PATH.${RESET}"; exit 1; } 
-command -v grep >/dev/null 2>&1 || { echo -e >&2 "${RED_BOLD}Error: grep not found in PATH.${RESET}"; exit 1; } 
-command -v sed >/dev/null 2>&1 || { echo -e >&2 "${RED_BOLD}Error: sed not found in PATH.${RESET}"; exit 1; } 
+command -v awk >/dev/null 2>&1 || { echo -e >&2 "${RED_BOLD}Error: awk not found in PATH.${RESET}"; exit 1; }
+command -v grep >/dev/null 2>&1 || { echo -e >&2 "${RED_BOLD}Error: grep not found in PATH.${RESET}"; exit 1; }
+command -v sed >/dev/null 2>&1 || { echo -e >&2 "${RED_BOLD}Error: sed not found in PATH.${RESET}"; exit 1; }
+command -v sort >/dev/null 2>&1 || { echo -e >&2 "${RED_BOLD}Error: sort not found in PATH.${RESET}"; exit 1; }
+command -v bc >/dev/null 2>&1 || { echo -e >&2 "${RED_BOLD}Error: bc not found in PATH.${RESET}"; exit 1; }
+if [[ $RUN_BUSCO -eq 1 ]]; then
+    command -v busco >/dev/null 2>&1 || { echo -e >&2 "${RED_BOLD}Error: busco not found in PATH.${RESET}"; exit 1; }
+    command -v bedtools >/dev/null 2>&1 || { echo -e >&2 "${RED_BOLD}Error: bedtools not found in PATH.${RESET}"; exit 1; }
+    if [[ ${MODE} -eq 2 ]]; then
+        command -v samtools >/dev/null 2>&1 || { echo -e >&2 "${RED_BOLD}Error: samtools not found in PATH (needed for faidx).${RESET}"; exit 1; }
+    fi
+fi
 echo -e "${GREEN}Dependencies found.${RESET}" | tee -a "${LOG_FILE}"
 
-# --- Print Configuration ---
 echo -e "${BLUE_BOLD}--- Starting Plasmid Copy Number Estimation v${VERSION} ---${RESET}" | tee -a "${LOG_FILE}"
-echo -e "${MAGENTA}Input Mode         : ${MODE}${RESET}" | tee -a "${LOG_FILE}"
+printf "%-25s : %s\n" "Normalization" "${NORM_MODE}${RESET}" | tee -a "${LOG_FILE}"
 if [[ ${MODE} -eq 1 ]]; then
-    echo -e "${MAGENTA}Chromosome FASTA (-c): ${CHR_FASTA}${RESET}" | tee -a "${LOG_FILE}"
-    echo -e "${MAGENTA}Plasmid FASTA    (-p): ${PLS_FASTA}${RESET}" | tee -a "${LOG_FILE}"
+    printf "%-25s : %s\n" "Chromosome FASTA (-c)" "${CHR_FASTA}${RESET}" | tee -a "${LOG_FILE}"
+    printf "%-25s : %s\n" "Plasmid FASTA (-p)" "${PLS_FASTA}${RESET}" | tee -a "${LOG_FILE}"
+    if [[ $AGGREGATE_PLASMIDS -eq 1 ]]; then printf "%-25s : %s\n" "Aggregate Plasmid (-s)" "Yes${RESET}" | tee -a "${LOG_FILE}"; fi
 elif [[ ${MODE} -eq 2 ]]; then
-    echo -e "${MAGENTA}Assembly FASTA   (-a): ${ASSEMBLY_FASTA}${RESET}" | tee -a "${LOG_FILE}"
-    echo -e "${MAGENTA}Chromosome List  (-C): ${CHR_LIST_FILE}${RESET}" | tee -a "${LOG_FILE}"
-    echo -e "${MAGENTA}Plasmid List     (-P): ${PLS_LIST_FILE}${RESET}" | tee -a "${LOG_FILE}"
+    printf "%-25s : %s\n" "Assembly FASTA (-a)" "${ASSEMBLY_FASTA}${RESET}" | tee -a "${LOG_FILE}"
+    printf "%-25s : %s\n" "Chromosome List (-C)" "${CHR_LIST_FILE}${RESET}" | tee -a "${LOG_FILE}"
+    printf "%-25s : %s\n" "Plasmid List (-P)" "${PLS_LIST_FILE}${RESET}" | tee -a "${LOG_FILE}"
 fi
-echo -e "${MAGENTA}Reads R1         (-r): ${READS_R1}${RESET}" | tee -a "${LOG_FILE}"
-echo -e "${MAGENTA}Reads R2         (-R): ${READS_R2}${RESET}" | tee -a "${LOG_FILE}"
-echo -e "${MAGENTA}Threads          (-t): ${THREADS}${RESET}" | tee -a "${LOG_FILE}"
-echo -e "${MAGENTA}Output Prefix    (-o): ${OUTPUT_PREFIX}${RESET}" | tee -a "${LOG_FILE}"
-echo -e "${MAGENTA}Keep Intermediate  (-k): ${KEEP_INTERMEDIATE}${RESET}" | tee -a "${LOG_FILE}"
-echo -e "${MAGENTA}Log File           : ${LOG_FILE}${RESET}" | tee -a "${LOG_FILE}"
-echo -e "${BLUE_BOLD}-----------------------------------------------${RESET}" | tee -a "${LOG_FILE}"
+if [[ $RUN_BUSCO -eq 1 ]]; then
+     printf "%-25s : %s\n" "BUSCO Lineage (-L)" "${BUSCO_LINEAGE}${RESET}" | tee -a "${LOG_FILE}"
+fi
+printf "%-25s : %s\n" "Reads R1 (-r)" "${READS_R1}${RESET}" | tee -a "${LOG_FILE}"
+printf "%-25s : %s\n" "Reads R2 (-R)" "${READS_R2}${RESET}" | tee -a "${LOG_FILE}"
+printf "%-25s : %s\n" "Threads (-t)" "${THREADS}${RESET}" | tee -a "${LOG_FILE}"
+printf "%-25s : %s\n" "Output Prefix (-o)" "${OUTPUT_PREFIX}${RESET}" | tee -a "${LOG_FILE}"
+printf "%-25s : %s\n" "Min MAPQ (-Q)" "${MIN_MAPQ}${RESET}" | tee -a "${LOG_FILE}"
+printf "%-25s : %s\n" "Filter Flag (-F)" "${SAM_FILTER_FLAG}${RESET}" | tee -a "${LOG_FILE}"
+printf "%-25s : %s\n" "Generate Plot (-l)" "${GENERATE_PLOT}${RESET}" | tee -a "${LOG_FILE}"
+printf "%-25s : %s\n" "Keep Intermediate (-k)" "${KEEP_INTERMEDIATE}${RESET}" | tee -a "${LOG_FILE}"
+printf "%-25s : %s\n" "Log File" "${LOG_FILE}${RESET}" | tee -a "${LOG_FILE}"
+echo -e "${BLUE_BOLD}--------------------------------------------------------${RESET}" | tee -a "${LOG_FILE}"
 
-# --- Prepare arguments for R script ---
 echo -e "${MAGENTA}Preparing arguments for R script...${RESET}" | tee -a "${LOG_FILE}"
-if [[ ${MODE} -eq 1 ]]; then
-    echo "Extracting chromosome names from ${CHR_FASTA}..." | tee -a "${LOG_FILE}"
-    grep '^>' "${CHR_FASTA}" | sed 's/>//; s/ .*//' > "${tmp_chr_list}"
-    if [ ! -s "${tmp_chr_list}" ]; then echo -e "${YELLOW_BOLD}Warning: Failed to extract chromosome names from ${CHR_FASTA}, or file was empty.${RESET}" >&2 | tee -a "${LOG_FILE}"; fi
-    chr_name_list_arg="${tmp_chr_list}"
+if [[ "${NORM_MODE}" == "Chromosome" ]]; then
+    if [[ ${MODE} -eq 1 ]]; then
+        echo "Extracting chromosome names from ${CHR_FASTA}..." | tee -a "${LOG_FILE}"
+        (grep '^>' "${CHR_FASTA}" | sed 's/>//; s/ .*//' > "${tmp_chr_list}") >> "${LOG_FILE}" 2>&1
+        if [ ! -s "${tmp_chr_list}" ]; then echo -e "${YELLOW_BOLD}Warning: Failed to extract chromosome names from ${CHR_FASTA}, or file was empty.${RESET}" >&2 | tee -a "${LOG_FILE}"; fi
+        chr_name_list_arg="${tmp_chr_list}"
+    elif [[ ${MODE} -eq 2 ]]; then
+        chr_name_list_arg="${CHR_LIST_FILE}"
+    fi
+fi
 
+if [[ -n "${PLS_FASTA}" ]]; then
     echo "Extracting plasmid names from ${PLS_FASTA}..." | tee -a "${LOG_FILE}"
-    grep '^>' "${PLS_FASTA}" | sed 's/>//; s/ .*//' > "${tmp_pls_list}"
+    (grep '^>' "${PLS_FASTA}" | sed 's/>//; s/ .*//' > "${tmp_pls_list}") >> "${LOG_FILE}" 2>&1
     if [ ! -s "${tmp_pls_list}" ]; then echo -e "${RED_BOLD}Error: Failed to extract plasmid names from ${PLS_FASTA}, or file was empty.${RESET}" >&2; rm -f $tmp_chr_list; exit 1; fi
     pls_name_list_arg="${tmp_pls_list}"
-elif [[ ${MODE} -eq 2 ]]; then
-    echo "Using chromosome names from ${CHR_LIST_FILE}..." | tee -a "${LOG_FILE}"
-    chr_name_list_arg="${CHR_LIST_FILE}"
+elif [[ -n "${PLS_LIST_FILE}" ]]; then
     echo "Using plasmid names from ${PLS_LIST_FILE}..." | tee -a "${LOG_FILE}"
     pls_name_list_arg="${PLS_LIST_FILE}"
 fi
+if [[ -z "${pls_name_list_arg}" ]]; then echo -e "${RED_BOLD}Internal Error: Plasmid list argument for R not set.${RESET}" >&2; exit 1; fi
 echo -e "${GREEN}Arguments prepared.${RESET}" | tee -a "${LOG_FILE}"
 
-# --- Workflow Steps ---
-
-# Step 1: Define/Create Reference for Alignment
-echo -e "${CYAN_BOLD}[Step 1/8] Defining/Creating reference for alignment...${RESET}" | tee -a "${LOG_FILE}"
+# Step 1
+echo -e "${CYAN_BOLD}[Step 1/11] Defining/Creating reference for alignment...${RESET}" | tee -a "${LOG_FILE}"
 if [[ ${MODE} -eq 1 ]]; then
-    echo "Mode 1: Concatenating ${CHR_FASTA} and ${PLS_FASTA}..." | tee -a "${LOG_FILE}"
+    echo "Concatenating ${CHR_FASTA} and ${PLS_FASTA}..." | tee -a "${LOG_FILE}"
     ALIGNMENT_REF="${COMBINED_REF}"
     (cat "${CHR_FASTA}" "${PLS_FASTA}" > "${ALIGNMENT_REF}") >> "${LOG_FILE}" 2>&1
     if [ $? -ne 0 ]; then echo -e "${RED_BOLD}Error during concatenation. Check ${LOG_FILE}${RESET}" >&2; exit 1; fi
     echo -e "${GREEN}Combined reference file created: ${ALIGNMENT_REF}${RESET}" | tee -a "${LOG_FILE}"
 else
-    # Mode 2 uses the input assembly directly
-    echo "Mode 2: Using assembly ${ASSEMBLY_FASTA} as reference..." | tee -a "${LOG_FILE}"
+    echo "Using assembly ${ASSEMBLY_FASTA} as reference..." | tee -a "${LOG_FILE}"
     ALIGNMENT_REF="${ASSEMBLY_FASTA}"
     echo -e "${GREEN}Reference for alignment set to: ${ALIGNMENT_REF}${RESET}" | tee -a "${LOG_FILE}"
 fi
 
-# Step 2: Index Alignment Reference
-echo -e "${CYAN_BOLD}[Step 2/8] Indexing alignment reference (${ALIGNMENT_REF})...${RESET}" | tee -a "${LOG_FILE}"
+# Step 2
+echo -e "${CYAN_BOLD}[Step 2/11] Indexing alignment reference (${ALIGNMENT_REF})...${RESET}" | tee -a "${LOG_FILE}"
 if [ -f "${ALIGNMENT_REF}.bwt" ]; then
     echo "Index files found, skipping indexing." | tee -a "${LOG_FILE}"
 else
@@ -236,75 +280,145 @@ else
 fi
 echo -e "${GREEN}Done.${RESET}" | tee -a "${LOG_FILE}"
 
-# Step 3: Align Reads
-echo -e "${CYAN_BOLD}[Step 3/8] Aligning reads with BWA-MEM...${RESET}" | tee -a "${LOG_FILE}"
+# Step 3
+echo -e "${CYAN_BOLD}[Step 3/11] Aligning reads with BWA-MEM...${RESET}" | tee -a "${LOG_FILE}"
 UNSORTED_BAM="${OUTPUT_PREFIX}_alignment.unsorted.bam"
 (bwa mem -t ${THREADS} "${ALIGNMENT_REF}" "${READS_R1}" "${READS_R2}" | \
   samtools view -@ ${THREADS} -Sb -o "${UNSORTED_BAM}") >> "${LOG_FILE}" 2>&1
 if [ $? -ne 0 ]; then echo -e "${RED_BOLD}Error during BWA alignment or Samtools view. Check ${LOG_FILE}${RESET}" >&2; exit 1; fi
 echo -e "${GREEN}Done.${RESET}" | tee -a "${LOG_FILE}"
 
-# Step 4: Sort BAM
-echo -e "${CYAN_BOLD}[Step 4/8] Sorting BAM file...${RESET}" | tee -a "${LOG_FILE}"
+# Step 4
+echo -e "${CYAN_BOLD}[Step 4/11] Sorting BAM file...${RESET}" | tee -a "${LOG_FILE}"
 (samtools sort -@ ${THREADS} -o "${SORTED_BAM}" "${UNSORTED_BAM}") >> "${LOG_FILE}" 2>&1
 if [ $? -ne 0 ]; then echo -e "${RED_BOLD}Error during Samtools sort. Check ${LOG_FILE}${RESET}" >&2; exit 1; fi
-rm -f "${UNSORTED_BAM}" 
+rm -f "${UNSORTED_BAM}"
 echo -e "${GREEN}Done. Sorted BAM: ${SORTED_BAM}${RESET}" | tee -a "${LOG_FILE}"
 
-# Step 5: Index Sorted BAM
-echo -e "${CYAN_BOLD}[Step 5/8] Indexing sorted BAM file...${RESET}" | tee -a "${LOG_FILE}"
-(samtools index -@ ${THREADS} "${SORTED_BAM}") >> "${LOG_FILE}" 2>&1
+# Step 5
+BAM_FOR_COVERAGE="${SORTED_BAM}" 
+if [[ ${SAM_FILTER_FLAG} -gt 0 || ${MIN_MAPQ} -gt 0 ]]; then
+    echo -e "${CYAN_BOLD}[Step 5/11] Filtering alignments (MQ >= ${MIN_MAPQ}, Flags excluded: ${SAM_FILTER_FLAG})...${RESET}" | tee -a "${LOG_FILE}"
+    BAM_FOR_COVERAGE="${FILTERED_BAM}" 
+    (samtools view ${view_opts} -o "${BAM_FOR_COVERAGE}" "${SORTED_BAM}") >> "${LOG_FILE}" 2>&1
+    if [ $? -ne 0 ]; then echo -e "${RED_BOLD}Error during samtools view filtering. Check ${LOG_FILE}${RESET}" >&2; exit 1; fi
+    echo -e "${GREEN}Filtered BAM created: ${BAM_FOR_COVERAGE}${RESET}" | tee -a "${LOG_FILE}"
+else
+     echo -e "${CYAN_BOLD}[Step 5/11] Skipping alignment filtering.${RESET}" | tee -a "${LOG_FILE}"
+fi
+
+# Step 6
+echo -e "${CYAN_BOLD}[Step 6/11] Indexing BAM file for coverage (${BAM_FOR_COVERAGE})...${RESET}" | tee -a "${LOG_FILE}"
+(samtools index -@ ${THREADS} "${BAM_FOR_COVERAGE}") >> "${LOG_FILE}" 2>&1
 if [ $? -ne 0 ]; then echo -e "${RED_BOLD}Error during Samtools index. Check ${LOG_FILE}${RESET}" >&2; exit 1; fi
 echo -e "${GREEN}Done.${RESET}" | tee -a "${LOG_FILE}"
 
-# Step 6: Calculate Coverage
-echo -e "${CYAN_BOLD}[Step 6/8] Calculating coverage...${RESET}" | tee -a "${LOG_FILE}"
-echo "Running samtools coverage (output: ${COVERAGE_SUMMARY})..." | tee -a "${LOG_FILE}"
-(samtools coverage "${SORTED_BAM}" -o "${COVERAGE_SUMMARY}") >> "${LOG_FILE}" 2>&1
+# Step 7
+echo -e "${CYAN_BOLD}[Step 7/11] Running samtools coverage...${RESET}" | tee -a "${LOG_FILE}"
+(samtools coverage ${samcov_opts} "${BAM_FOR_COVERAGE}" -o "${COVERAGE_SUMMARY}") >> "${LOG_FILE}" 2>&1
 if [ $? -ne 0 ]; then echo -e "${RED_BOLD}Error running samtools coverage. Check ${LOG_FILE}${RESET}" >&2; exit 1; fi
 if [ ! -s "${COVERAGE_SUMMARY}" ]; then echo -e "${RED_BOLD}Error: Coverage summary file is empty.${RESET}" >&2; exit 1; fi
 echo -e "${GREEN}Coverage summary generated.${RESET}" | tee -a "${LOG_FILE}"
 
-# Step 7: Calculate Final Copy Numbers using R
-echo -e "${CYAN_BOLD}[Step 7/8] Calculating copy numbers via R...${RESET}" | tee -a "${LOG_FILE}"
+# Step 8
+echo -e "${CYAN_BOLD}[Step 8/11] Calculating coverage...${RESET}" | tee -a "${LOG_FILE}"
+DENOMINATOR_DEPTH="0"
+BUSCO_INPUT_FASTA=""
+
+if [[ $RUN_BUSCO -eq 1 ]]; then
+    echo "Calculating coverage using BUSCO SCGs..." | tee -a "${LOG_FILE}"
+    busco_run_name="${OUTPUT_PREFIX}_busco"
+    busco_out_dir_full="${busco_out_dir}/${busco_run_name}"
+    BUSCO_INPUT_FASTA="${CHR_FASTA}"
+    (busco -i "${BUSCO_INPUT_FASTA}" -m "${BUSCO_MODE}" -l "${BUSCO_LINEAGE}" -o "${busco_run_name}" --out_path "${busco_out_dir}" -c "${THREADS}" --force --quiet) >> "${LOG_FILE}" 2>&1;
+    if [ $? -ne 0 ]; then echo -e "${RED_BOLD}Error during BUSCO execution.${RESET}" >&2; exit 1; fi
+    busco_table="${busco_out_dir_full}/run_${BUSCO_LINEAGE}/full_table.tsv";
+    if [ ! -f "${busco_table}" ]; then echo -e "${RED_BOLD}Error: BUSCO table not found: ${busco_table}${RESET}" >&2; exit 1; fi
+    echo "Creating BED file..." | tee -a "${LOG_FILE}";
+    (awk 'BEGIN{FS="\t"; OFS="\t"} !/^#/ && $2=="Complete" {start=$4; end=$5; if (start > end) { temp=start; start=end; end=temp; } print $3, start-1, end}' "${busco_table}" > "${scg_bed_file}") >> "${LOG_FILE}" 2>&1;
+    if [ ! -s "${scg_bed_file}" ]; then echo -e "${YELLOW_BOLD}Warning: No 'Complete' BUSCO genes found. Using default mode.${RESET}" >&2 | tee -a "${LOG_FILE}"; NORM_MODE="Chromosome";
+    else
+        bedtools_opts="-mean"
+        (bedtools coverage ${bedtools_opts} -a "${scg_bed_file}" -b "${BAM_FOR_COVERAGE}" > "${scg_cov_file}") >> "${LOG_FILE}" 2>&1;
+        if [ $? -ne 0 ]; then echo -e "${RED_BOLD}Error running bedtools coverage.${RESET}" >&2; exit 1; fi
+        echo "Calculating median depth..." | tee -a "${LOG_FILE}";
+        DENOMINATOR_DEPTH=$(sort -k7n "${scg_cov_file}" | awk '$NF > 0 { a[NR]=$NF } END { n=NR; if (n>0) { if (n%2==1) print a[int(n/2)+1]; else print (a[n/2]+a[n/2+1])/2 } else print 0}' );
+        if [ $? -ne 0 ]; then echo -e "${RED_BOLD}Error calculating median depth.${RESET}" >&2; exit 1; fi
+        echo -e "${GREEN}Median depth calculated" | tee -a "${LOG_FILE}";
+    fi
+fi
+
+if [[ "${NORM_MODE}" == "Chromosome" ]]; then
+    echo "Calculating baseline using chromosome contigs..." | tee -a "${LOG_FILE}"
+    if [ ! -f "${COVERAGE_SUMMARY}" ]; then echo -e "${RED_BOLD}Error: Coverage summary file not found: ${COVERAGE_SUMMARY}${RESET}" >&2; exit 1; fi
+    if [[ ! -f "${chr_name_list_arg}" ]]; then echo -e "${RED_BOLD}Error: Chromosome list file not found: ${chr_name_list_arg}${RESET}" >&2; exit 1; fi
+    echo "Averaging whole chromosome contig coverages from ${chr_name_list_arg}..." | tee -a "${LOG_FILE}"
+    DENOMINATOR_DEPTH=$(awk -v chr_list_file="${chr_name_list_arg}" 'BEGIN{FS="\t"; while((getline<chr_list_file)>0) chrs[$0]=1} NR>1 { contig=$1; gsub(/^#/, "", contig); if(contig in chrs){len=$3-$2; if(len>0 && $7>0){sum_len+=len; sum_weighted_depth+=$7*len}}} END{if(sum_len>0) print sum_weighted_depth/sum_len; else print 0}' "${COVERAGE_SUMMARY}")
+    if [ $? -ne 0 ]; then echo -e "${RED_BOLD}Error calculating average chromosome depth.${RESET}" >&2; exit 1; fi
+    echo -e "${GREEN}Average baseline depth (Chromosome Contigs): ${DENOMINATOR_DEPTH}${RESET}" | tee -a "${LOG_FILE}"
+fi
+
+if [[ -z "$DENOMINATOR_DEPTH" || $(echo "$DENOMINATOR_DEPTH <= 0" | bc) -eq 1 ]]; then
+    echo -e "${YELLOW_BOLD}Warning: Calculated baseline denominator depth is zero or invalid (${DENOMINATOR_DEPTH}). Copy numbers will be NA or infinite.${RESET}" >&2 | tee -a "${LOG_FILE}"
+    DENOMINATOR_DEPTH="0"
+fi
+
+# Step 9
+echo -e "${CYAN_BOLD}[Step 9/11] Calculating plasmid coverage...${RESET}" | tee -a "${LOG_FILE}"
+if [ ! -f "${COVERAGE_SUMMARY}" ]; then echo -e "${RED_BOLD}Error: Coverage summary file ${COVERAGE_SUMMARY} not found.${RESET}" >&2; exit 1; fi
+echo -e "plasmid_contig\tlength\tmean_depth" > "${plasmid_coverage_data_tmp}"
+awk -v pls_list_file="${pls_name_list_arg}" 'BEGIN{FS="\t"; while((getline<pls_list_file)>0) pls[$0]=1} NR>1 { contig=$1; gsub(/^#/, "", contig); if(contig in pls){len=$3-$2; if(len>0) print contig"\t"len"\t"$7}}' "${COVERAGE_SUMMARY}" >> "${plasmid_coverage_data_tmp}"
+if [ $? -ne 0 ]; then echo -e "${RED_BOLD}Error extracting plasmid coverage data.${RESET}" >&2; exit 1; fi
+echo -e "${GREEN}Plasmid coverage calculated.${RESET}" | tee -a "${LOG_FILE}"
+
+# Step 10
+echo -e "${CYAN_BOLD}[Step 10/11] Calculating copy numbers & plotting...${RESET}" | tee -a "${LOG_FILE}"
+plasmid_id_arg=""
+if [[ $AGGREGATE_PLASMIDS -eq 1 ]]; then
+    plasmid_id_arg="${PLS_FASTA}"
+fi
 (Rscript "${RSCRIPT_PATH}" \
-    "${COVERAGE_SUMMARY}" \
-    "${chr_name_list_arg}" \
-    "${pls_name_list_arg}" \
-    "${FINAL_REPORT_TSV}") >> "${LOG_FILE}" 2>&1
+    "${plasmid_coverage_data_tmp}" \
+    "${DENOMINATOR_DEPTH}" \
+    "${NORM_MODE}" \
+    "${FINAL_REPORT_TSV}" \
+    "${GENERATE_PLOT}" \
+    "${AGGREGATE_PLASMIDS}" \
+    "${plasmid_id_arg}") >> "${LOG_FILE}" 2>&1 
 R_EXIT_CODE=$?
 
-# Step 8: Cleanup
-echo -e "${CYAN_BOLD}[Step 8/8] Cleaning up intermediate files...${RESET}" | tee -a "${LOG_FILE}"
-if [[ -f "${tmp_chr_list}" ]]; then rm -f "${tmp_chr_list}"; fi
-if [[ -f "${tmp_pls_list}" ]]; then rm -f "${tmp_pls_list}"; fi
+# Step 11
+echo -e "${CYAN_BOLD}[Step 11/11] Cleaning up intermediate files...${RESET}" | tee -a "${LOG_FILE}"
+rm -f "${tmp_chr_list}" "${tmp_pls_list}" "${plasmid_coverage_data_tmp}"
+rm -f "${scg_bed_file}" "${scg_cov_file}"
+rm -f "${tmp_chrom_for_busco}"
 
-# Conditionally removal of intermediate files
 if [[ ${KEEP_INTERMEDIATE} -eq 0 ]]; then
-    echo "Removing intermediate files (use -k to keep BAM/BAI/Index/Coverage)..." | tee -a "${LOG_FILE}"
-    rm -f "${SORTED_BAM}" "${SORTED_BAM}.bai" "${COVERAGE_SUMMARY}"
-    if [[ -n "${ALIGNMENT_REF}" ]]; then
-      find "$(dirname "${ALIGNMENT_REF}")" -maxdepth 1 -name "$(basename "${ALIGNMENT_REF}").*" \
-           \( -name '*.amb' -o -name '*.ann' -o -name '*.bwt' -o -name '*.pac' -o -name '*.sa' -o -name '*.fai' \) -delete >> "${LOG_FILE}" 2>&1
+    echo "Removing intermediate files (use -k to keep BAM/BAI/Index/Coverage/BUSCO)..." | tee -a "${LOG_FILE}"
+    rm -f "${SORTED_BAM}" "${SORTED_BAM}.bai"
+    if [[ -f "${FILTERED_BAM}" ]]; then rm -f "${FILTERED_BAM}" "${FILTERED_BAM}.bai"; fi
+    rm -f "${COVERAGE_SUMMARY}"
+    if [[ -n "${ALIGNMENT_REF}" && -f "${ALIGNMENT_REF}" ]]; then
+      rm -f "${ALIGNMENT_REF}.amb" "${ALIGNMENT_REF}.ann" "${ALIGNMENT_REF}.bwt" \
+            "${ALIGNMENT_REF}.pac" "${ALIGNMENT_REF}.sa" "${ALIGNMENT_REF}.fai" >> "${LOG_FILE}" 2>&1 || true
     fi
     if [[ ${MODE} -eq 1 && -n "${ALIGNMENT_REF}" && -f "${ALIGNMENT_REF}" ]]; then
-        rm -f "${ALIGNMENT_REF}"
+        if [[ "${ALIGNMENT_REF}" == "${COMBINED_REF}" ]]; then rm -f "${ALIGNMENT_REF}"; fi
+    fi
+    if [[ $RUN_BUSCO -eq 1 && -d "${busco_out_dir}" ]]; then
+        echo "Removing BUSCO temporary directories..." | tee -a "${LOG_FILE}"
+        rm -rf "${busco_out_dir}"/*/hmmer_output/ "${busco_out_dir}"/*/busco_sequences/ "${busco_out_dir}"/*/*.bbtools_output/ >> "${LOG_FILE}" 2>&1 || true
     fi
 else
     echo "Keeping intermediate files (--keep-intermediate specified)." | tee -a "${LOG_FILE}"
-    echo "Kept: ${SORTED_BAM}, ${SORTED_BAM}.bai, ${COVERAGE_SUMMARY}" | tee -a "${LOG_FILE}"
-    if [[ -n "${ALIGNMENT_REF}" ]]; then echo "Kept: BWA index files for ${ALIGNMENT_REF}" | tee -a "${LOG_FILE}"; fi
-    if [[ ${MODE} -eq 1 && -n "${ALIGNMENT_REF}" && -f "${ALIGNMENT_REF}" ]]; then echo "Kept: ${ALIGNMENT_REF}" | tee -a "${LOG_FILE}"; fi
 fi
 echo -e "${GREEN}Cleanup complete.${RESET}" | tee -a "${LOG_FILE}"
 
-# Check R script exit code
 if [ ${R_EXIT_CODE} -ne 0 ]; then
      echo -e "${RED_BOLD}Error: R script failed with exit code ${R_EXIT_CODE}. Check ${LOG_FILE}${RESET}" >&2
      exit 1
 fi
 
-# --- Elapsed Time ---
 end_time=$(date +%s)
 duration=$((end_time - start_time))
 secs=$((duration % 60))
@@ -315,7 +429,7 @@ echo -e "${GREEN}✅ Workflow Complete ${RESET}" | tee -a "${LOG_FILE}"
 printf "${GREEN}   Total Elapsed Time: %02d:%02d:%02d${RESET}\n" $hrs $mins $secs | tee -a "${LOG_FILE}"
 echo -e "${GREEN}   Log file: ${LOG_FILE}${RESET}" | tee -a "${LOG_FILE}"
 echo -e "${GREEN}   Final report: ${FINAL_REPORT_TSV}${RESET}" | tee -a "${LOG_FILE}"
+if [[ $GENERATE_PLOT -eq 1 ]]; then echo -e "${GREEN}   Plot file: ${PLOT_FILE}${RESET}" | tee -a "${LOG_FILE}"; fi
 echo -e "${BLUE_BOLD}-----------------------------------------------${RESET}" | tee -a "${LOG_FILE}"
 
 exit 0
-```
