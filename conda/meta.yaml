@@ -6,6 +6,7 @@ package:
   version: {{ version }}
 
 source:
+  path: ..
   url: https://github.com/riccabolla/PCNE/archive/refs/tags/v{{ version }}.tar.gz
   sha256: 2224dc896461ef978630b609528aa1de40109fc72ef9dec0fb548af762630490
 
