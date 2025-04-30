@@ -113,7 +113,7 @@ pcne \
 For both modes the main output is a `TSV` file. <br>
 Example `output.tsv`: <br>
 | plasmid_contig |length | mean_depth |baseline_mean_depth|normalization_mode|estimated_copy_number |
-|||||||
+|...|...|...|...|...|...|
 |plasmid_contig_ 1|54321 |152.75|31.45|BUSCO_SCG|4.86|
 |plasmid_contig_2_IncFIB|9876|28.50|31.45|BUSCO_SCG|0.91|
 |...|...|...|...|...| 
