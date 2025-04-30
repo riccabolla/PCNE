@@ -5,8 +5,6 @@
 **P**lasmid **C**opy **N**umber **E**stimator (**PCNE**) is a simple tool to estimate the copy number of plasmid from an assembled genome. <br>
 ## ⚠️ Warning⚠️ 
 This tool is currently in its early development stage (v0.2.0). While functional for its core purpose, it will receive updates often, including additional features, bug fixing... (for more information see [here](#Next-features)). Please report any issues or suggestions!
-## Disclaimer
-This tool requires a previous step of plasmid identification using tools like Platon (recommended), MOB-Suite, PlasmidFinder... <br>
 ## Introduction
 Determining the copy number of plasmids relative to the host chromosome is essential for understanding plasmid biology, evolution, and the dosage of plasmid-borne genes (e.g., antimicrobial resistance genes). PCNE automates this estimation from standard bioinformatics file formats. <br>
 ### Key features
