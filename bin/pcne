@@ -72,7 +72,7 @@ usage() {
   echo -e "  ${script_name} [Mode 1 | Mode 2] [Common Required] [Optional]"
   echo -e "    ${CYAN_BOLD}Mode 1:${RESET}"
   echo "      -c, --chromosome FILE : Path to chromosome FASTA file (Required)"
-  echo "      -p, --multi-plasmid FILE : Path to plasmid FASTA file (Required, assumes)"
+  echo "      -p, --plasmid FILE : Path to plasmid FASTA file (Required, assumes)"
   echo "                                (Use with --single-plasmid if file contains one fragmented plasmid)"
   echo -e "    ${CYAN_BOLD}Mode 2:${RESET}"
   echo "      -a, --assembly FILE   : Path to the assembled genome FASTA file (Required)"
