@@ -16,14 +16,13 @@ Determining the copy number of plasmids relative to the host chromosome is essen
 ## Installation
 ### Bioconda [![Static Badge](https://img.shields.io/badge/Install_with-Bioconda-blue)](https://bioconda.github.io/)
 
-The recommended way to install Plasmid Copy Number Estimator will be via [BioConda](https://bioconda.github.io/) once approved.<br>
+The recommended way to install Plasmid Copy Number Estimator will be via [BioConda](https://bioconda.github.io/)<br>
 1) **Set up Conda Channels (if not already done):**<br>
 
 ```
 conda config --add channels defaults
 conda config --add channels bioconda
 conda config --add channels conda-forge
-conda config --set channel_priority strict
 ```
 2) **Create a new environment and install:**<br>
 ```
@@ -44,7 +43,7 @@ The tool relies on the following softwares, which will be installed automaticall
 2) **Samtools** (>=1.2 recommended)<br>
 3) **Busco** (=5.8.2)
 4) **bedtools** (>=2.31.1)
-5) **R** (>=4.4.2 recommended)<br>
+5) **R** (>=4.4.3 recommended)<br>
 6) **R Packages**: readr (>=2.1.5), dplyr (>=1.1.4), ggplot2(>=3.5.1)<br>
 ## Requirements
 This tool requires a previous step of plasmid identification using tools like Platon (recommended), MOB-Suite, PlasmidFinder...
