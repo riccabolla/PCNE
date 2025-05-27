@@ -39,14 +39,14 @@ cd PCNE/
 (Note: While the Bioconda submission is pending, you can install it from your local build using `conda install --use-local pcne` after building it yourself with `conda build conda/`)
 ## Dependencies
 The tool relies on the following softwares, which will be installed automatically by Conda:<br>
-1) **BWA** (>=0.7.18 recommended)<br>
-2) **Samtools** (>=1.2 recommended)<br>
-3) **Busco** (=5.8.2)
-4) **bedtools** (>=2.31.1)
-5) **R** (>=4.4.3 recommended)<br>
-6) **R Packages**: readr (>=2.1.5), dplyr (>=1.1.4), ggplot2(>=3.5.1)<br>
+1) **BWA** (tested with v0.7.18)<br>
+2) **Samtools** (tested with v1.20)<br>
+3) **Busco** (tested with v5.8.2)
+4) **bedtools** (tested with v2.31.1)
+5) **R** (tested with v4.4.3)<br>
+6) **R Packages**: readr (v2.1.5), dplyr (v1.1.4), ggplot2(v3.5.2)<br>
 ## Requirements
-This tool requires a previous step of plasmid identification using tools like Platon (recommended), MOB-Suite, PlasmidFinder...
+This tool requires a previous step of plasmid identification using tools like Platon, MOB-Suite, PlasmidFinder...
 ## Usage
 ```
 pcne -c <chromosome.fasta> -p <plasmid.fasta> -r <reads_R1.fastq.gz> -R <reads_R2.fastq.gz> [-t <threads>] [-o <output_prefix>]
@@ -66,7 +66,7 @@ pcne -c <chromosome.fasta> -p <plasmid.fasta> -r <reads_R1.fastq.gz> -R <reads_R
   -Q, --min-quality INT      Minimum mapping quality (MQ) for read filtering (default: OFF)  
   -F, --filter INT           SAM flag to exclude reads (default: OFF)  
   -l, --plot                 Generate a plot of estimated copy numbers (.png)  
-  -s, --single-plasmid       Treat all contigs in `-p` FASTA as one fragmented plasmid (Mode 1 only)  
+  -s, --single-plasmid       Treat all contigs in `-p` FASTA as one fragmented plasmid  
   -t, --threads INT          Number of threads to use (default: 1)  
   -o, --output STR           Prefix for output files (default: pcne)  
   -k, --keep-intermediate    Keep intermediate files (default: OFF)  
