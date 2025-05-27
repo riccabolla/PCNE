@@ -16,8 +16,8 @@ Determining the copy number of plasmids relative to the host chromosome is essen
 ## Installation
 ### Bioconda [![Static Badge](https://img.shields.io/badge/Install_with-Bioconda-blue)](https://bioconda.github.io/)
 
-The recommended way to install Plasmid Copy Number Estimator will be via [BioConda](https://bioconda.github.io/)<br>
-1) **Set up Conda Channels (if not already done):**<br>
+The recommended way to install Plasmid Copy Number Estimator is via [BioConda](https://bioconda.github.io/)<br>
+1) **Set up Conda Channels:**<br>
 
 ```
 conda config --add channels defaults
@@ -35,8 +35,9 @@ Clone this repository to install the latest version direct from GitHub
 cd $HOME
 git clone https://github.com/riccabolla/PCNE.git 
 cd PCNE/
+conda build conda/
+conda install --use-local pcne
 ```
-(Note: While the Bioconda submission is pending, you can install it from your local build using `conda install --use-local pcne` after building it yourself with `conda build conda/`)
 ## Dependencies
 The tool relies on the following softwares, which will be installed automatically by Conda:<br>
 1) **BWA** (tested with v0.7.18)<br>
