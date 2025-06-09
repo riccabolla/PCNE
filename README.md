@@ -11,7 +11,8 @@ Determining the copy number of plasmids relative to the host chromosome is essen
 * **Flexible input**: Accepts either pre-separated chromosome and plasmid FASTA files or a complete genome assembly FASTA with corresponding contig lists. It also allows to use as plasmid input a multi-fasta file with one contig per plasmid, a complete assembled plasmid (1 contig), or a draft assembled plasmid (one plasmid with multiple contigs). 
 * **Multiple normalization**: To assess baseline coverage depth, it allows for a standard length-weighted average coverage of all designated chromosomal contigs or a more precise normalization using single-copy core genes identified bu BUSCO. 
 * **Alignment Filtering**: Allow to filter alignments based on mapping quality and SAM flags before coverage calculation, helping to remove ambiguous or low-quality mappings.
-* **Visualization**: Optionally generates a bar plot visualizing the estimated copy numbers for each plasmid
+* **Visualization**: Optionally generates a bar plot visualizing the estimated copy numbers for each plasmid <br>
+(figure/Workflow.png)
 
 ## Installation
 ### Bioconda [![Static Badge](https://img.shields.io/badge/Install_with-Bioconda-blue)](https://bioconda.github.io/)
