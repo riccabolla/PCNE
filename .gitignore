@@ -1,4 +1,4 @@
-# Bioinformatics intermediate files
+# Temporary files
 *.bai
 *.bam
 *.sam
@@ -25,9 +25,9 @@ conda-build/
 conda-bld/
 *.tar.bz2
 
-# OS-specific files (optional but recommended)
+# OS-specific files
 .DS_Store
 Thumbs.db
 
-# IDE specific (optional)
+# IDE specific
 .vscode/
