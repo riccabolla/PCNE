@@ -1,5 +1,7 @@
 #!/usr/bin/env Rscript
 
+#Script for PCNE v1.0.0
+
 suppressPackageStartupMessages(library(readr))
 suppressPackageStartupMessages(library(dplyr))
 
@@ -66,7 +68,7 @@ output_columns <- c("plasmid_contig", "length", "mean_depth", "baseline_mean_dep
                     "normalization_mode", "estimated_copy_number")
 
 final_report <- data.frame(matrix(ncol = length(output_columns), nrow = 0,
-                          dimnames = list(NULL, output_columns))) %>%
+                                  dimnames = list(NULL, output_columns))) %>%
                 mutate(
                     plasmid_contig=character(), length=integer(), mean_depth=double(),
                     baseline_mean_depth=double(), normalization_mode=character(),
@@ -89,12 +91,10 @@ if (inherits(plasmid_data, "data.frame") && nrow(plasmid_data) > 0) {
 
         if (!is.na(agg_data$total_length) && agg_data$total_length > 0) {
             aggregated_mean_depth = agg_data$total_weighted_depth / agg_data$total_length
-            estimated_copy_number = if_else(!is.na(denominator_depth) && denominator_depth > 0, aggregated_mean_depth / denominator_depth, NA_real_)
-
+            estimated_copy_number = if_else(!is.na(denominator_depth) & denominator_depth > 0, aggregated_mean_depth / denominator_depth, NA_real_)
             agg_plasmid_id <- if (nzchar(plasmid_input_filename)) {
                                   sub("\\.[^.]*$", "", basename(plasmid_input_filename))
                               } else { "Aggregated_Plasmid" }
-
             final_report <- tibble(
                 plasmid_contig = agg_plasmid_id,
                 length = as.integer(agg_data$total_length),
@@ -109,9 +109,9 @@ if (inherits(plasmid_data, "data.frame") && nrow(plasmid_data) > 0) {
         message("Calculating per-contig results...")
         final_report <- plasmid_data %>%
           dplyr::mutate(
-            baseline_mean_depth = denominator_depth,
-            normalization_mode = norm_mode_str,
-            estimated_copy_number = if_else(!is.na(baseline_mean_depth) && baseline_mean_depth > 0, mean_depth / baseline_mean_depth, NA_real_)
+            baseline_mean_depth = denominator_depth, 
+            normalization_mode = norm_mode_str,     
+            estimated_copy_number = if_else(!is.na(baseline_mean_depth) & baseline_mean_depth > 0, mean_depth / baseline_mean_depth, NA_real_)
           ) %>%
           dplyr::select( all_of(output_columns) ) %>% 
           dplyr::arrange(desc(estimated_copy_number))
@@ -132,29 +132,35 @@ if (plot_requested) {
     if (nrow(final_report) > 0 && sum(!is.na(final_report$estimated_copy_number)) > 0) {
         plot_data <- final_report %>%
             mutate(
-                plot_label = factor(plasmid_contig, levels = rev(final_report$plasmid_contig))
+                plot_label = factor(plasmid_contig, levels = rev(final_report$plasmid_contig)) 
             )
-
         p <- ggplot(plot_data, aes(x = plot_label, y = estimated_copy_number)) +
           geom_bar(stat = "identity", fill = "skyblue", color = "black", width=0.7) +
           coord_flip() +
           labs(
-            title = paste("Estimated Plasmid Copy Numbers"),
-            x = if_else(aggregate_flag, "Aggregated Plasmid", "Plasmid Contig"),
-            y = "Copy Number"
+            title = paste("Plasmid Copy Numbers"),
+            subtitle = paste("Normalization Mode:", norm_mode_str), 
+            x = "Plasmid",
+            y = "Copy Number" 
           ) +
-          theme_minimal(base_size = 11) +
+          theme_classic(base_size = 11) +
           theme(
-              plot.title = element_text(hjust = 0.5, face="bold"),
-              axis.text.y = element_text(size = if_else(aggregate_flag, 10, 8)),
-              panel.grid.major.y = element_blank(),
-              panel.grid.minor.y = element_blank()
-          )
+            plot.title = element_text(hjust = 0.5, face="bold"),
+            plot.subtitle = element_text(hjust = 0.5, size=9), 
+            axis.text.y = element_text(size = if_else(nrow(plot_data) > 20, 6, if_else(nrow(plot_data) > 10, 8, 10))), 
+            panel.grid.major.y = element_blank(),
+            panel.grid.minor.y = element_blank()
+          )+
+          scale_y_continuous(expand = c(0, 0)) 
 
         tryCatch({
             plot_height = max(4, nrow(plot_data) * 0.25 + 1.5)
-            ggsave(filename = plot_file, plot = p, width = 7, height = plot_height, limitsize = FALSE, dpi=300)
-            message(paste("Plot saved successfully to:", plot_file))
+            if (nzchar(plot_file)) {
+                ggsave(filename = plot_file, plot = p, width = 7, height = plot_height, limitsize = FALSE, dpi=300)
+                message(paste("Plot saved successfully to:", plot_file))
+            } else {
+                warning("Plot filename was empty. Plot not saved.", call. = FALSE)
+            }
         }, error = function(e) {
             warning(paste("Failed to save plot:", e$message), call. = FALSE)
         })
@@ -165,16 +171,33 @@ if (plot_requested) {
 
 # --- Write Output ---
 message(paste("Writing final report to:", output_file))
-final_report_rounded <- final_report %>%
-    mutate(across(c(mean_depth, baseline_mean_depth, estimated_copy_number),
-                  ~ round(., digits = 3)))
+if (inherits(final_report, "data.frame") && nrow(final_report) > 0) {
+    numeric_cols_to_round <- intersect(names(final_report), c("mean_depth", "baseline_mean_depth", "estimated_copy_number"))
+    final_report_rounded <- final_report %>%
+        mutate(across(all_of(numeric_cols_to_round), ~ round(., digits = 3)))
 
-tryCatch({
-    readr::write_tsv(final_report_rounded, output_file, na = "NA", col_names = TRUE)
-    message("Output file written successfully.")
-}, error = function(e) {
-    stop(paste("Error writing output file '", output_file, "': ", e$message), call. = FALSE)
-})
+    tryCatch({
+        readr::write_tsv(final_report_rounded, output_file, na = "NA", col_names = TRUE)
+        message("Output file written successfully.")
+    }, error = function(e) {
+        stop(paste("Error writing output file '", output_file, "': ", e$message), call. = FALSE)
+    })
+} else {
+    message("Final report is empty. Writing an empty file with headers.")
+    empty_df_for_output <- tibble(
+        plasmid_contig = character(),
+        length = integer(),
+        mean_depth = double(),
+        baseline_mean_depth = double(),
+        normalization_mode = character(),
+        estimated_copy_number = double()
+    )
+     tryCatch({
+        readr::write_tsv(empty_df_for_output, output_file, na = "NA", col_names = TRUE)
+        message("Empty output file with headers written successfully.")
+    }, error = function(e) {
+        stop(paste("Error writing empty output file '", output_file, "': ", e$message), call. = FALSE)
+    })
+}
 
 message("R script finished.")
-
