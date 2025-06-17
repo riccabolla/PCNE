@@ -1,10 +1,8 @@
 ![Static Badge](https://img.shields.io/badge/License-MIT-blue)
-![Static Badge](https://img.shields.io/badge/version-0.2.0-blue)
+![Static Badge](https://img.shields.io/badge/version-1.0.0-blue)
 
 # Plasmid Copy Number Estimator
 **P**lasmid **C**opy **N**umber **E**stimator (**PCNE**) is a simple tool to estimate the copy number of plasmid from an assembled genome. <br>
-## ⚠️ Warning⚠️ 
-This tool is currently in its early development stage (v0.2.0). While functional for its core purpose, it will receive updates often, including additional features, bug fixing... (for more information see [here](#Next-features)). Please report any issues or suggestions!
 ## Introduction
 Determining the copy number of plasmids relative to the host chromosome is essential for understanding plasmid biology, evolution, and the dosage of plasmid-borne genes (e.g., antimicrobial resistance genes). PCNE automates this estimation from standard bioinformatics file formats. <br>
 ### Key features
@@ -70,6 +68,10 @@ pcne -c <chromosome.fasta> -p <plasmid.fasta> -r <reads_R1.fastq.gz> -R <reads_R
   -F, --filter INT           SAM flag to exclude reads (default: OFF)  
   -l, --plot                 Generate a plot of estimated copy numbers (.png)  
   -s, --single-plasmid       Treat all contigs in `-p` FASTA as one fragmented plasmid  
+  --gc-correction            Enable GC-correction
+  --gc-frac FLOAT            Specify LOESS smoothing fraction (default: 0.3)
+  --gc-window INT            Specify windows-size (default: 1000 bp)
+  --gc-plot FILE             Generate GC plot (require to specify filename.png)
   -t, --threads INT          Number of threads to use (default: 1)  
   -o, --output STR           Prefix for output files (default: pcne)  
   -k, --keep-intermediate    Keep intermediate files (default: OFF)  
@@ -117,8 +119,8 @@ Example `output.tsv`: <br>
 
 | plasmid_contig |length | mean_depth |baseline_mean_depth |normalization_mode |estimated_copy_number |
 |---|---|---|---|---|---|
-|plasmid_contig_ 1|54321 |152.75|31.45|BUSCO_SCG|4.86|
-|plasmid_contig_2_IncFIB|9876|28.50|31.45|BUSCO_SCG|0.91|
+|plasmid_contig_ 1|54321 |152.75|31.45|SCG|4.86|
+|plasmid_contig_2_IncFIB|9876|28.50|31.45|SCG|0.91|
 |...|...|...|...|...|...| 
 
 Columns: <br>
@@ -131,7 +133,7 @@ Columns: <br>
 
 ## <a name="Next-features"></a>Next features
 ### Major updates
-* GC normalization
+* Long-read support
 
 ### **License**<br>
 This project is licensed under the MIT License - see the [LICENSE](https://github.com/riccabolla/PCNE/blob/main/LICENSE) file for details.<br>
