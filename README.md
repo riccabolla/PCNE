@@ -54,26 +54,26 @@ pcne -c <chromosome.fasta> -p <plasmid.fasta> -r <reads_R1.fastq.gz> -R <reads_R
 ```
 ## Command line options
 ```
-  -c, --chromosome FILE      Path to chromosome FASTA file (Required)  
-  -p, --plasmid FILE         Path to plasmid FASTA file (Required)  
+  -c, --chromosome <file>    Path to chromosome FASTA file (Required)  
+  -p, --plasmid <file>       Path to plasmid FASTA file (Required)  
                              Use with `--single-plasmid` if file contains one fragmented plasmid  
-  -a, --assembly FILE        Path to the assembled genome FASTA file (Required)  
-  -C, --chr-list FILE        Path to file containing chromosome contig names (Required)  
-  -P, --plasmid-list FILE    Path to file containing plasmid contig names (Required)  
-  -r, --reads1 FILE          Path to forward reads (FASTQ) (Mandatory)  
-  -R, --reads2 FILE          Path to reverse reads (FASTQ) (Mandatory)  
+  -a, --assembly <file>      Path to the assembled genome FASTA file (Required)  
+  -C, --chr-list <file>      Path to file containing chromosome contig names (Required)  
+  -P, --plasmid-list <file>  Path to file containing plasmid contig names (Required)  
+  -r, --reads1 <file>        Path to forward reads (FASTQ) (Mandatory)  
+  -R, --reads2 <file>        Path to reverse reads (FASTQ) (Mandatory)  
   -b, --busco                Activate BUSCO SCG normalization (default: OFF)  
-  -L, --busco-lineage STR    BUSCO lineage dataset name (default: bacteria_odb12)  
-  -Q, --min-quality INT      Minimum mapping quality (MQ) for read filtering (default: OFF)  
-  -F, --filter INT           SAM flag to exclude reads (default: OFF)  
+  -L, --busco-lineage <str>  BUSCO lineage dataset name (default: bacteria_odb12)  
+  -Q, --min-quality <int>    Minimum mapping quality (MQ) for read filtering (default: OFF)  
+  -F, --filter <int>         SAM flag to exclude reads (default: OFF)  
   -l, --plot                 Generate a plot of estimated copy numbers (.png)  
   -s, --single-plasmid       Treat all contigs in `-p` FASTA as one fragmented plasmid  
   --gc-correction            Enable GC-correction
-  --gc-frac FLOAT            Specify LOESS smoothing fraction (default: 0.3)
-  --gc-window INT            Specify windows-size (default: 1000 bp)
-  --gc-plot FILE             Generate GC plot (require to specify filename.png)
-  -t, --threads INT          Number of threads to use (default: 1)  
-  -o, --output STR           Prefix for output files (default: pcne)  
+  --gc-frac <float>          Specify LOESS smoothing fraction (default: 0.3)
+  --gc-window <int>          Specify windows-size (default: 1000 bp)
+  --gc-plot <file>           Generate GC plot (require to specify filename.png)
+  -t, --threads <int>        Number of threads to use (default: 1)  
+  -o, --output <str>         Prefix for output files (default: pcne)  
   -k, --keep-intermediate    Keep intermediate files (default: OFF)  
   -v, --version              Show version information  
   -h, --help                 Show help message 
