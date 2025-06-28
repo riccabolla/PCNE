@@ -9,9 +9,9 @@ args <- commandArgs(trailingOnly = TRUE)
 
 if (length(args) != 7) {
   message("Usage: Rscript PCNE.R <plasmid_coverage.tsv> <denominator_depth> <norm_mode_string> <output.tsv> <generate_plot_flag> <aggregate_plasmid_flag> <plasmid_input_filename_or_empty>")
-  message("  <plasmid_coverage.tsv>: Pre-filtered TSV file with columns: plasmid_contig, length, mean_depth")
-  message("  <denominator_depth>: Single numeric value for baseline average depth")
-  message("  <norm_mode_string>: String indicating normalization mode (e.g., 'Chromosome', 'BUSCO_SCG')")
+  message("  <plasmid_coverage.tsv>: Pre-filtered TSV file")
+  message("  <denominator_depth>: Value for baseline average depth")
+  message("  <norm_mode_string>: Normalization mode")
   message("  <output.tsv>: Path for the final TSV report")
   message("  <generate_plot_flag>: 0 (no plot) or 1 (generate plot)")
   message("  <aggregate_plasmid_flag>: 0 (per-contig results) or 1 (aggregate results for all contigs in input)")

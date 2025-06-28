@@ -13,15 +13,15 @@ args <- commandArgs(trailingOnly = TRUE)
 if (length(args) != 10) {
   message("Usage: Rscript gc_correct_and_calculate.R <window_data.tsv> <baseline_list.txt> <plasmid_list.txt> <loess_frac> <output.tsv> <gc_plot_file_or_empty> <generate_plot_flag> <aggregate_plasmid_flag> <plasmid_input_filename_or_empty> <norm_mode_string>")
   message("  <window_data.tsv>: TSV with windowed contig, start, end, gc, depth")
-  message("  <baseline_list.txt>: File containing list of contig names for baseline (Chr or BUSCO)")
-  message("  <plasmid_list.txt>: File containing list of plasmid contig names")
+  message("  <baseline_list.txt>: List of contig names for baseline")
+  message("  <plasmid_list.txt>: List of plasmid contig names")
   message("  <loess_frac>: LOESS span parameter (e.g., 0.3)")
   message("  <output.tsv>: Path for the final TSV report")
   message("  <gc_plot_file_or_empty>: Path to save GC diagnostic plot, or \"\"")
   message("  <generate_plot_flag>: 0 (no plot) or 1 (generate final plot)")
   message("  <aggregate_plasmid_flag>: 0 (per-contig) or 1 (aggregate)")
-  message("  <plasmid_input_filename_or_empty>: Original plasmid input filename if aggregating")
-  message("  <norm_mode_string>: String indicating normalization mode (e.g., Chromosome_GC_Corrected)")
+  message("  <plasmid_input_filename_or_empty>: plasmid filename")
+  message("  <norm_mode_string>: String indicating normalization mode")
   stop("Incorrect number of arguments supplied.", call. = FALSE)
 }
 
@@ -37,7 +37,7 @@ aggregate_flag <- as.logical(as.integer(args[8]))
 plasmid_input_filename <- args[9]
 norm_mode_str <- args[10]
 
-# --- Inputs ---
+# Inputs
 loess_frac <- as.numeric(loess_frac_str)
 if(is.na(loess_frac) || loess_frac <= 0 || loess_frac > 1) {
     warning(paste("Invalid LOESS fraction provided:", loess_frac_str, "- using default 0.3"), call.=FALSE)
@@ -46,7 +46,7 @@ if(is.na(loess_frac) || loess_frac <= 0 || loess_frac > 1) {
 plot_requested <- (generate_plot_flag == 1)
 gc_plot_requested <- nzchar(gc_plot_file) 
 
-# --- Function to Read Name Lists ---
+# Read Name Lists
 read_name_list <- function(filepath, list_type) {
   if (!file.exists(filepath) || file.access(filepath, 4) != 0) {
       stop(paste("Error:", list_type, "list file not found or not readable:", filepath), call. = FALSE)
@@ -59,7 +59,7 @@ read_name_list <- function(filepath, list_type) {
   }, error = function(e) { stop(paste("Error reading", list_type, "list file '", filepath, "': ", e$message), call. = FALSE) })
 }
 
-# --- Read Lists ---
+# Read Lists
 message(paste("Reading baseline contig names from:", baseline_list_file))
 baseline_contig_names <- read_name_list(baseline_list_file, "Baseline")
 message(paste("Found", length(baseline_contig_names), "unique baseline contig names."))
@@ -68,7 +68,7 @@ message(paste("Reading plasmid contig names from:", plasmid_list_file))
 plasmid_names_list <- read_name_list(plasmid_list_file, "Plasmid")
 message(paste("Found", length(plasmid_names_list), "unique plasmid contig names."))
 
-# --- Read Window Data ---
+# Read Window Data
 message(paste("Reading windowed GC/depth data from:", window_data_file))
 window_data <- NULL
 tryCatch({
@@ -82,7 +82,7 @@ tryCatch({
     }
     window_data <- window_data %>% dplyr::mutate(length = end - start)
     window_data <- window_data %>% dplyr::filter(!is.na(depth), !is.na(gc), length > 0, is.finite(depth), is.finite(gc), depth >= 0)
-    if(nrow(window_data) == 0) { stop("No valid data rows found in window data file after filtering NAs/zero length/neg depth.", call.=FALSE) }
+    if(nrow(window_data) == 0) { stop("No valid data rows found in window data", call.=FALSE) }
 
 }, error = function(e){ stop(paste("Error reading or processing window data file '", window_data_file, "': ", e$message), call.=FALSE) })
 message("Windowed GC/depth data read successfully.")
@@ -157,7 +157,7 @@ plasmid_corrected_data <- contig_corrected_summary %>%
     dplyr::select(plasmid_contig = contig, length = total_length, mean_depth = corrected_mean_depth)
 
 # --- Calculate Copy Number  ---
-message("Calculating copy numbers using corrected depths (Poisson CIs removed)...")
+message("Calculating copy numbers using corrected depths...")
 
 # Define output columns 
 output_columns <- c("plasmid_contig", "length", "mean_depth", "baseline_mean_depth",
