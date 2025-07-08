@@ -35,8 +35,6 @@ Clone this repository to install the latest version direct from GitHub
 cd $HOME
 git clone https://github.com/riccabolla/PCNE.git 
 cd PCNE/
-conda build conda/
-conda install --use-local pcne
 ```
 ## Dependencies
 The tool relies on the following softwares, which will be installed automatically by Conda:<br>
