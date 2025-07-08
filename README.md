@@ -4,7 +4,7 @@
 # Plasmid Copy Number Estimator
 **P**lasmid **C**opy **N**umber **E**stimator (**PCNE**) is a simple tool to estimate the copy number of plasmid from an assembled genome. <br>
 ## Introduction
-Determining the copy number of plasmids relative to the host chromosome is essential for understanding plasmid biology, evolution, and the dosage of plasmid-borne genes (e.g., antimicrobial resistance genes). PCNE automates this estimation from standard bioinformatics file formats. <br>
+Determining the copy number of plasmids is essential for understanding plasmid biology, evolution, and the dosage of plasmid-borne genes (e.g., antimicrobial resistance genes). PCNE automates this estimation from standard bioinformatics file formats. <br>
 ### Key features
 * **Flexible input**: Accepts either pre-separated chromosome and plasmid FASTA files or a complete genome assembly FASTA with corresponding contig lists. It also allows to use as plasmid input a multi-fasta file with one contig per plasmid, a complete assembled plasmid (1 contig), or a draft assembled plasmid (one plasmid with multiple contigs). 
 * **Multiple normalization**: To assess baseline coverage depth, it allows for a standard length-weighted average coverage of all designated chromosomal contigs or a more precise normalization using single-copy core genes identified bu BUSCO. 
