@@ -16,7 +16,7 @@ Determining the copy number of plasmids is essential for understanding plasmid b
 ## Installation
 ### Bioconda [![Static Badge](https://img.shields.io/badge/Install_with-Bioconda-blue)](https://bioconda.github.io/)
 
-The recommended way to install Plasmid Copy Number Estimator is via [BioConda](https://bioconda.github.io/)<br>
+Install Plasmid Copy Number Estimator via [BioConda](https://bioconda.github.io/)<br>
 1) **Set up Conda Channels:**<br>
 
 ```
@@ -29,6 +29,14 @@ conda config --add channels conda-forge
 conda create -n pcne_env -c conda-forge -c bioconda pcne
 conda activate pcne_env
 ```
+### Docker [![Static Badge](https://img.shields.io/badge/Install_with-Docker-green)](https://hub.docker.com/explore)
+You can use [Docker](https://hub.docker.com/repository/docker/riccabolla/pcne/general):
+
+```
+docker pull riccabolla/pcne:1.0.0
+docker run riccabolla/pcne:1.0.0 -h
+```
+
 ### Source
 Clone this repository to install the latest version direct from GitHub
 ```
