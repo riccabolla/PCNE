@@ -14,7 +14,7 @@ Determining the copy number of plasmids is essential for understanding plasmid b
   <img title="PCNE pipeline" src="figure/Workflow.png" width=85%>
 
 ## Installation
-### Bioconda [![Static Badge](https://img.shields.io/badge/Install_with-Bioconda-blue)](https://bioconda.github.io/)
+### Bioconda [![install with bioconda](https://img.shields.io/badge/install%20with-bioconda-blue.svg?style=flat)](http://bioconda.github.io/recipes/pcne/README.html)
 
 Install Plasmid Copy Number Estimator via [BioConda](https://bioconda.github.io/)<br>
 1) **Set up Conda Channels:**<br>
