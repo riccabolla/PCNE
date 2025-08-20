@@ -33,7 +33,7 @@ plasmid_names <- readLines(plasmid_list_file)
 
 # Initialize the column to be used for final calculations
 window_data$depth_to_use <- window_data$depth
-final_norm_mode <- "Whole_chromosome_median"
+final_norm_mode <- "Whole_chromosome"
 gc_correction_applied <- FALSE
 loess_frac <- NA
 gc_model <- NULL
@@ -50,7 +50,7 @@ if (enable_gc_flag) {
       # --- Automatic LOESS Fraction Selection with K-Fold Cross-Validation ---
       if (tolower(loess_frac_str) == "auto") {
           message("Selecting LOESS fraction via 5-fold cross-validation...")
-          candidate_fracs <- seq(0.15, 0.75, by = 0.05)
+          candidate_fracs <- seq(0.15, 0.75, by = 0.05) 
           k_folds <- 5
           
           # Create folds
