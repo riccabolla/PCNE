@@ -8,7 +8,7 @@ package:
 source:
   path: ..
   url: https://github.com/riccabolla/PCNE/archive/refs/tags/v{{ version }}.tar.gz
-  sha256: 726d6e285e4088e37e9d5f5f34fab9e6d90feb8f0ce13af2874228021d4ef58a
+  sha256: 546444caf7646b23b571afeb9c9df3d7af9d7536ef06978728faf173333d08f5
 
 build:
   number: 0 
