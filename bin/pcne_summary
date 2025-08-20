@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+
+# Version: 1.0.0
+# Wrapper script to summarize multiple pcne runs.
+
+set -e
+set -o pipefail
+
+# --- Find R Script ---
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+RSCRIPT_SUMMARY_PATH="${SCRIPT_DIR}/PCNE_summary.R"
+
+if [ ! -f "${RSCRIPT_SUMMARY_PATH}" ]; then
+    echo "Error: Summary R script (PCNE_summary.R) not found at: ${RSCRIPT_SUMMARY_PATH}" >&2
+    exit 1
+fi
+
+echo "Running PCNE Summary..."
+Rscript "${RSCRIPT_SUMMARY_PATH}" "$@"
+echo "PCNE Summary complete."
