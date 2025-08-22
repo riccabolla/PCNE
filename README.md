@@ -1,5 +1,5 @@
 ![Static Badge](https://img.shields.io/badge/License-MIT-blue)
-![Static Badge](https://img.shields.io/badge/version-1.0.0-blue)
+![Static Badge](https://img.shields.io/badge/version-2.0.0-blue)
 
 # Plasmid Copy Number Estimator
 **P**lasmid **C**opy **N**umber **E**stimator (**PCNE**) is a simple tool to estimate the copy number of plasmid from an assembled genome. <br>
@@ -21,7 +21,7 @@ You can esily get them using tools like [Platon](https://github.com/oschwengers/
 8) Write output and cleanup
 
 <p align="center">
-  <img title="PCNE pipeline" src="figure/Workflow.png" width=85%>
+  <img title="PCNE pipeline" src="figure/Workflow_v2.0.0.png" width=85%>
 
 ## Dependencies
 The tool relies on the following softwares, which will be installed automatically by Conda:<br>
