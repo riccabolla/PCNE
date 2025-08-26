@@ -68,13 +68,10 @@ if (enable_gc_flag) {
                       error = function(e) NULL
                   )
                   
-                  if (is.null(model)) return(NA)
-                  
+                  if (is.null(model)) return(NA)              
                   predictions <- predict(model, newdata = test_data)
-                  # Calculate Mean Squared Error for this fold
                   mean((test_data$depth - predictions)^2, na.rm = TRUE)
               })
-              # Average the MSE across all k folds for this span
               mean(fold_mses, na.rm = TRUE)
           })
           
@@ -111,7 +108,7 @@ if (enable_gc_flag) {
   }
 }
 
-# --- Aggregate Depths and Calculate PCN using MEDIAN ---
+# --- Aggregate Depths and Calculate PCN  ---
 message("Aggregating depths...")
 
 contig_summary <- window_data %>%
@@ -192,7 +189,7 @@ if (generate_plot_flag && nrow(final_report) > 0) {
     message(paste("Plot saved successfully to:", plot_file))
 }
 
-# --- Generate GC diagnostic plot ---
+# --- Generate GC plot ---
 if (gc_correction_applied && generate_gc_plot_flag && !is.null(gc_model)) {
     output_prefix <- sub("_results\\.tsv$", "", output_file)
     gc_plot_file <- paste0(output_prefix, "_gcplot.png")
@@ -227,3 +224,4 @@ message(paste("Writing final report to:", output_file))
 readr::write_tsv(final_report, output_file, na = "NA")
 
 message("R script finished.")
+
