@@ -1,5 +1,7 @@
-![Static Badge](https://img.shields.io/badge/License-MIT-blue)
-![Static Badge](https://img.shields.io/badge/version-2.0.0-blue)
+[![Anaconda-Server Badge](https://anaconda.org/bioconda/pcne/badges/version.svg)](https://anaconda.org/bioconda/pcne)
+[![Anaconda-Server Badge](https://anaconda.org/bioconda/pcne/badges/downloads.svg)](https://anaconda.org/bioconda/pcne)
+[![Anaconda-Server Badge](https://anaconda.org/bioconda/pcne/badges/latest_release_date.svg)](https://anaconda.org/bioconda/pcne)
+[![Anaconda-Server Badge](https://anaconda.org/bioconda/pcne/badges/license.svg)](https://anaconda.org/bioconda/pcne)
 
 # Plasmid Copy Number Estimator
 **P**lasmid **C**opy **N**umber **E**stimator (**PCNE**) is a simple tool to estimate the copy number of plasmid from an assembled genome. <br>
