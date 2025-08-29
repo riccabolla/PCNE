@@ -49,7 +49,7 @@ conda config --add channels conda-forge
 conda create -n pcne_env -c conda-forge -c bioconda pcne
 conda activate pcne_env
 ```
-### Docker [![Static Badge](https://img.shields.io/badge/Install_with-Docker-green)](https://hub.docker.com/explore)
+### Docker [![Static Badge](https://img.shields.io/badge/Install_with-Docker-green)](https://hub.docker.com/r/riccabolla/pcne/tags)
 You can use [Docker](https://hub.docker.com/repository/docker/riccabolla/pcne/general):
 
 ```
