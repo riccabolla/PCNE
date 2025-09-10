@@ -175,7 +175,7 @@ This sets the SAM flag used to filter out reads. Use this to exclude reads with 
 This new feature has the goal to extend PCNE usage to experiments where no short-reads are available.
 
 ### **License**<br>
-This project is licensed under the MIT License - see the [LICENSE](https://github.com/riccabolla/PCNE/blob/main/LICENSE) file for details.<br>
+This project is licensed under the MIT License. See the [LICENSE](https://github.com/riccabolla/PCNE/blob/main/LICENSE) file for details.<br>
 
 ### **Contact** <br>
 riccardo.bollini@hunimed.eu <br>
