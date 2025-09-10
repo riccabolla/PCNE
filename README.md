@@ -94,7 +94,7 @@ pcne -c <chromosome.fasta> -p <plasmid.fasta> -r <reads_R1.fastq.gz> -R <reads_R
   -h, --help                 Show help message 
 ```
 
-# Run the tool
+## Run the tool
 
 The tool can be run in two different ways: <br>
 **Mode 1**: it requires two separate `FASTA` files for chromosome and plasmid(s). <br>
