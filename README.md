@@ -132,7 +132,7 @@ pcne \
 For both modes the main output is a `TSV` file. <br>
 Example `output.tsv`: <br>
 
-|sample | plasmid_contig |length | mean_depth |baseline_mean_depth |normalization_mode |estimated_copy_number |
+|sample | plasmid_contig |length | median_depth |baseline_median_depth |normalization_mode |estimated_copy_number |
 |---|---|---|---|---|---|---|
 |isolate_1|plasmid_contig_ 1|54321 |152.75|31.45|Whole_Chromosome|4.86|
 |isolate_1|plasmid_contig_2_IncFIB|9876|28.50|31.45|Whole_Chromosome|0.91|
@@ -142,8 +142,8 @@ Columns: <br>
 * **sample**: Name of the output file
 * **plasmid_contig**: Name of the plasmid contig (from the input plasmid FASTA).<br>
 * **length**: Length of the plasmid contig in base pairs.<br>
-* **mean_depth**: Average sequencing depth calculated for this plasmid contig.<br>
-* **baseline_mean_depth**: Baseline coverage depth.<br>
+* **median_depth**: Median plasmid depth.<br>
+* **baseline_median_depth**: Baseline coverage depth.<br>
 * **normalization mdoe**: how baseline coverage depth was calculated <br>
 * **estimated_copy_number**: The calculated copy number (mean_depth / baseline_mean_depth).<br>
 
