@@ -20,7 +20,9 @@ message(paste("Found", length(result_files), "result files. Combining..."))
 # Read files
 combined_data <- result_files %>%
   set_names() %>%
-  map_dfr(~ read_tsv(.x, show_col_types = FALSE), .id = "source_file")
+  map_dfr(~ read_tsv(.x, show_col_types = FALSE), .id = "source_file") %>%
+  mutate(sample = basename(sample),
+    source_file = basename(source_file))
 
 if (!("sample" %in% names(combined_data))) {
     stop("Error: The input TSV files do not contain the required 'sample' column. Please re-run pcne with a version that includes this feature.", call. = FALSE)
@@ -46,10 +48,11 @@ p <- ggplot(combined_data, aes(x = sample, y = estimated_copy_number, fill = pla
   ) +
   theme_classic(base_size = 12) +
   theme(
-    axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
+    axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, size = 5),
     plot.title = element_text(hjust = 0.5, face = "bold"),
     legend.position = "bottom"
-  )
+  ) +
+  scale_y_continuous(expand = c(0, 0))
 
 ggsave(filename = output_plot_file, plot = p, width = max(8, length(unique(combined_data$sample)) * 0.5), height = 6, dpi = 300, limitsize = FALSE)
 

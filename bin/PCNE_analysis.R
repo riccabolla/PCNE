@@ -33,7 +33,7 @@ plasmid_names <- readLines(plasmid_list_file)
 
 # Initialize the column to be used for final calculations
 window_data$depth_to_use <- window_data$depth
-final_norm_mode <- "Whole_chromosome"
+final_norm_mode <- "Default"
 gc_correction_applied <- FALSE
 loess_frac <- NA
 gc_model <- NULL
@@ -102,7 +102,7 @@ if (enable_gc_flag) {
 
       window_data$depth_to_use <- pmax(0, window_data$depth * (global_median_depth / window_data$expected_depth))
       
-      final_norm_mode <- "Whole_chromosome_GC_Corrected"
+      final_norm_mode <- "GC_Corrected"
       gc_correction_applied <- TRUE
       message("GC correction applied successfully.")
   }
@@ -147,16 +147,16 @@ if (aggregate_flag) {
     final_report <- tibble(
         sample = sample_name,
         plasmid_contig = agg_plasmid_id,
-        length = as.integer(agg_data$total_length),
-        median_depth = agg_median_depth,
-        baseline_median_depth = baseline_depth,
+        plasmid_length = as.integer(agg_data$total_length),
+        plasmid_depth = agg_median_depth,
+        chromosome_depth = baseline_depth,
         normalization_mode = final_norm_mode,
         estimated_copy_number = ifelse(baseline_depth > 0, round(agg_median_depth / baseline_depth,2), NA_real_)
     )
 } else {
     final_report <- plasmid_raw_report %>%
       mutate(sample = sample_name) %>%
-      select(sample, plasmid_contig, length, median_depth, baseline_median_depth, normalization_mode, estimated_copy_number) %>%
+      select(sample, plasmid_contig, plasmid_length, plasmid_depth, chromosome_depth, normalization_mode, estimated_copy_number) %>%
       arrange(desc(estimated_copy_number))
 }
 
