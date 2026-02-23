@@ -12,6 +12,10 @@ Determining the copy number of plasmids is essential for understanding plasmid b
 It requires either pre-separated chromosome and plasmid FASTA files or a complete genome assembly FASTA with corresponding contig lists. It also allows to use as plasmid input a multi-fasta file with one contig per plasmid, a complete assembled plasmid (1 contig), or a draft assembled plasmid (one plasmid with multiple contigs). <br>
 You can esily get them using tools like [Platon](https://github.com/oschwengers/platon), [MOB-Suite](https://github.com/phac-nml/mob-suite), [PlasmidFinder](https://github.com/genomicepidemiology/plasmidfinder)...
 
+## Citation
+When you use PCNE, please cite [Bollini R, Cento V. PCNE: A Tool for Plasmid Copy Number Estimation. Bioinformatics and Biology Insights. 2026;20. doi:10.1177/11779322251410037](https://journals.sagepub.com/doi/10.1177/11779322251410037?_gl=1*pmry81*_up*MQ..*_ga*NDAwMTM4NDk3LjE3NzE4NjM0MDM.*_ga_60R758KFDG*czE3NzE4NjM0MDMkbzEkZzAkdDE3NzE4NjM0MDMkajYwJGwwJGgyMjY4ODUzMDk.)
+  
+
 ## Pipeline summary
 1) Input parsing and file preparation
 2) Alignment
