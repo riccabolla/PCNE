@@ -1,6 +1,6 @@
 #!/usr/bin/env Rscript
 
-# Version: 1.0.0 compatible with PCNE v2.0.0
+# Version: 2.0.0 compatible with PCNE v3.0.0
 
 suppressPackageStartupMessages(library(readr))
 suppressPackageStartupMessages(library(dplyr))
@@ -127,11 +127,13 @@ message(sprintf("Final baseline depth: %.3f", baseline_depth))
 plasmid_raw_report <- contig_summary %>%
     filter(contig %in% plasmid_names) %>%
     mutate(
-        baseline_median_depth = baseline_depth,
+        chromosome_depth = baseline_depth,
         normalization_mode = final_norm_mode,
         estimated_copy_number = ifelse(baseline_depth > 0, round(median_depth / baseline_depth, 2), NA_real_)
     ) %>%
-    rename(plasmid_contig = contig)
+    rename(plasmid_contig = contig,
+           plasmid_length = length,
+           plasmid_depth = median_depth)
 
 # --- Handle Aggregation ---
 if (aggregate_flag) {
