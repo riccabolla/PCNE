@@ -48,7 +48,7 @@ p <- ggplot(combined_data, aes(x = sample, y = estimated_copy_number, fill = pla
   ) +
   theme_classic(base_size = 12) +
   theme(
-    axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, size = 5),
+    axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, size = 8),
     plot.title = element_text(hjust = 0.5, face = "bold"),
     legend.position = "bottom"
   ) +
