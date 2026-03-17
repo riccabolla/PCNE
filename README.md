@@ -27,11 +27,12 @@ When you use PCNE, please cite [Bollini R, Cento V. PCNE: A Tool for Plasmid Cop
 8) Write output and cleanup
 
 <p align="center">
-  <img title="PCNE pipeline" src="figure/Workflow_v2.0.0.png" width=85%>
+  <img title="PCNE pipeline" src="figure/PCNE_3.0.0.png" width=85%>
 
 ## Dependencies
 The tool relies on the following softwares, which will be installed automatically by Conda:<br>
 1) **BWA** (tested with v0.7.18)<br>
+2) **Minimap2** (2.3) <br>
 2) **Samtools** (tested with v1.20)<br>
 4) **bedtools** (tested with v2.31.1)
 5) **R** (tested with v4.4.3)<br>
@@ -57,8 +58,8 @@ conda activate pcne_env
 You can use [Docker](https://hub.docker.com/repository/docker/riccabolla/pcne/general):
 
 ```
-docker pull riccabolla/pcne:2.0.0
-docker run riccabolla/pcne:2.0.0 pcne -h
+docker pull riccabolla/pcne:v3.0.0
+docker run riccabolla/pcne:v3.0.0 pcne -h
 ```
 ### Ubuntu
 ```
@@ -71,7 +72,11 @@ bash PCNE/bin/pcne -h
 ```
 ## Quick Usage
 ```
+#short reads
 pcne -c <chromosome.fasta> -p <plasmid.fasta> -r <reads_R1.fastq.gz> -R <reads_R2.fastq.gz> [-t <threads>] [-o <output_prefix>]
+
+#long reads
+pcne_long --c <chromosome.fasta> -p <plasmid.fasta> -r <reads.fastq.gz> [-t <threads>] [-o <output_prefix>]
 ```
 ## Command line options
 ```
@@ -82,7 +87,9 @@ pcne -c <chromosome.fasta> -p <plasmid.fasta> -r <reads_R1.fastq.gz> -R <reads_R
   -C, --chr-list <file>      Path to file containing chromosome contig names (Required)  
   -P, --plasmid-list <file>  Path to file containing plasmid contig names (Required)  
   -r, --reads1 <file>        Path to forward reads (FASTQ) (Mandatory)  
-  -R, --reads2 <file>        Path to reverse reads (FASTQ) (Mandatory)  
+  -R, --reads2 <file>        Path to reverse reads (FASTQ) (Mandatory only for short reads)
+  --preset <str>             Minimap2 preset (default: map-ont) # pcne_long only
+  --minimap-opts <str>       Minimap2 options (use quotes) (default: OFF) # pcne_long only
   -Q, --min-quality <int>    Minimum mapping quality (MQ) for read filtering (default: OFF)  
   -F, --filter <int>         SAM flag to exclude reads (default: OFF)  
   -l, --plot                 Generate a plot of estimated copy numbers (.png)  
@@ -100,10 +107,10 @@ pcne -c <chromosome.fasta> -p <plasmid.fasta> -r <reads_R1.fastq.gz> -R <reads_R
 
 ## Run the tool
 
-The tool can be run in two different ways: <br>
+The tool can be use two different inputs: <br>
 **Mode 1**: it requires two separate `FASTA` files for chromosome and plasmid(s). <br>
 ```
-#Example Mode 1
+#Example Mode 1 for short reads
 pcne \ 
   -c my_sample.chromosome.fasta \ 
   -p my_sample.plasmid.fasta \ 
@@ -121,7 +128,7 @@ plasmid3_contig
 ...
 ```
 ```
-#Example Mode 2
+#Example Mode 2 for short reads
 pcne \ 
   -a my_sample_assembly.fasta \
   -C chromosome.list \
@@ -136,19 +143,19 @@ pcne \
 For both modes the main output is a `TSV` file. <br>
 Example `output.tsv`: <br>
 
-|sample | plasmid_contig |length | median_depth |baseline_median_depth |normalization_mode |estimated_copy_number |
+|sample | plasmid_contig |plasmid_length | plasmid_depth |chromosome_depth |normalization_mode |estimated_copy_number |
 |---|---|---|---|---|---|---|
-|isolate_1|plasmid_contig_ 1|54321 |152.75|31.45|Whole_Chromosome|4.86|
-|isolate_1|plasmid_contig_2_IncFIB|9876|28.50|31.45|Whole_Chromosome|0.91|
+|isolate_1|plasmid_contig_ 1|54321 |152.75|31.45|Default|4.86|
+|isolate_1|plasmid_contig_2_IncFIB|9876|28.50|31.45|Default|0.91|
 |...|...|...|...|...|...|...| 
 
 Columns: <br>
 * **sample**: Name of the output file
 * **plasmid_contig**: Name of the plasmid contig (from the input plasmid FASTA).<br>
-* **length**: Length of the plasmid contig in base pairs.<br>
-* **median_depth**: Median plasmid depth.<br>
-* **baseline_median_depth**: Baseline coverage depth.<br>
-* **normalization mdoe**: how baseline coverage depth was calculated <br>
+* **plasmid_length**: Length of the plasmid contig in base pairs.<br>
+* **plasmid_depth**: Median plasmid depth.<br>
+* **chromosome_depth**: Baseline coverage depth.<br>
+* **normalization mode**: how baseline coverage depth was calculated <br>
 * **estimated_copy_number**: The calculated copy number (mean_depth / baseline_mean_depth).<br>
 
 ## Summarizing multiple results
@@ -166,17 +173,20 @@ This will create two files:
 Optional parameters are designed to enhance overall accuracy, especially under challenging or non-ideal conditions. Each parameter is tunable, allowing the user to find the best combination to fit their data.
 ### --gc-correction
 This flag enables a model-based correction for GC content bias in sequencing data. <br>
-Use this option if you suspect your sequencing data may have GC bias, which is common for libraries prepared with PCR amplification steps. If you are using a PCR-free workflow or your control data shows a very flat GC-to-depth profile, this step may not be necessary.
+Use this option if you suspect your sequencing data may have GC bias, which is common for libraries prepared with PCR amplification steps. If you are using a PCR-free workflow or your control data shows a very flat GC-to-depth profile, this step may not be necessary. <br>
+You may skip this step when using long-reads (pcne_long).
 ### --min-quality / -Q
 This sets the minimum mapping quality (MAPQ) for a read to be included in the analysis. A high score means high confidence; a low score means the read could have aligned equally well to multiple different locations. <br>
 Use this to filter out ambiguously mapped reads.
 ### --filter / -F
 This sets the SAM flag used to filter out reads. Use this to exclude reads with undesirable properties (ex. PCR artifacts)
+### --minimap-opts
+Allow to use minimap2 optional parameters.
 
 ## <a name="Next-features"></a>Next features
-### Major updates
-#### Long-read only support
-This new feature has the goal to extend PCNE usage to experiments where no short-reads are available.
+Currently, no major updates are expected. <br>
+However, the tool is actively maintained, so it may change in the future. <br>
+For any suggetions, please use the GitHub [Issues](https://github.com/riccabolla/PCNE/issues) page. 
 
 ### **License**<br>
 This project is licensed under the MIT License. See the [LICENSE](https://github.com/riccabolla/PCNE/blob/main/LICENSE) file for details.<br>
@@ -185,4 +195,4 @@ This project is licensed under the MIT License. See the [LICENSE](https://github
 riccardo.bollini@hunimed.eu <br>
 
 ### **Issues**<br>
-Please report any issues or suggestions via the GitHub [Issues](https://github.com/riccabolla/PCNE/issues) page.<br>
+Please report any issues via the GitHub [Issues](https://github.com/riccabolla/PCNE/issues) page.<br>
