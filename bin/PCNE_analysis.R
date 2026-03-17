@@ -40,74 +40,88 @@ gc_model <- NULL
 
 # --- Perform Unified LOESS GC Correction (if enabled) ---
 if (enable_gc_flag) {
-  message("GC Correction enabled. Building LOESS model...")
+    message("GC Correction enabled. Building LOESS model...")
 
-  baseline_windows_for_fit <- window_data %>% filter(contig %in% chr_names, depth > 0)
+    baseline_windows_for_fit <- window_data %>% filter(contig %in% chr_names, depth > 0)
 
-  if(nrow(baseline_windows_for_fit) < 50) {
-      message("Warning: Too few baseline windows with coverage (<50). Skipping GC correction.")
-  } else {
+    if(nrow(baseline_windows_for_fit) < 50) {
+        message("Warning: Too few baseline windows with coverage (<50). Skipping GC correction.")
+    } else {
       # --- Automatic LOESS Fraction Selection with K-Fold Cross-Validation ---
-      if (tolower(loess_frac_str) == "auto") {
-          message("Selecting LOESS fraction via 5-fold cross-validation...")
-          candidate_fracs <- seq(0.15, 0.75, by = 0.05) 
-          k_folds <- 5
+        if (tolower(loess_frac_str) == "auto") {
+            message("Selecting LOESS fraction via 5-fold cross-validation...")
+            candidate_fracs <- seq(0.15, 0.75, by = 0.05) 
+            k_folds <- 5
           
-          # Create folds
-          set.seed(123) # for reproducibility
-          folds <- sample(cut(seq(1, nrow(baseline_windows_for_fit)), breaks = k_folds, labels = FALSE))
+            # Create folds
+            set.seed(123) # for reproducibility
+            folds <- sample(cut(seq(1, nrow(baseline_windows_for_fit)), breaks = k_folds, labels = FALSE))
           
-          avg_mse_per_frac <- sapply(candidate_fracs, function(span) {
-              fold_mses <- sapply(1:k_folds, function(k) {
-                  test_indices <- which(folds == k, arr.ind = TRUE)
-                  train_data <- baseline_windows_for_fit[-test_indices, ]
-                  test_data <- baseline_windows_for_fit[test_indices, ]
+            avg_mse_per_frac <- sapply(candidate_fracs, function(span) {
+                fold_mses <- sapply(1:k_folds, function(k) {
+                    test_indices <- which(folds == k, arr.ind = TRUE)
+                    train_data <- baseline_windows_for_fit[-test_indices, ]
+                    test_data <- baseline_windows_for_fit[test_indices, ]
                   
-                  model <- tryCatch(
-                      loess(depth ~ gc, data = train_data, span = span, control = loess.control(surface = "direct")),
-                      error = function(e) NULL
-                  )
+                    model <- tryCatch(
+                        loess(depth ~ gc, data = train_data, span = span, control = loess.control(surface = "direct")),
+                        error = function(e) NULL
+                    )
                   
-                  if (is.null(model)) return(NA)              
-                  predictions <- predict(model, newdata = test_data)
-                  mean((test_data$depth - predictions)^2, na.rm = TRUE)
-              })
-              mean(fold_mses, na.rm = TRUE)
-          })
+                    if (is.null(model)) return(NA)              
+                    predictions <- predict(model, newdata = test_data)
+                    mean((test_data$depth - predictions)^2, na.rm = TRUE)
+                })
+                mean(fold_mses, na.rm = TRUE)
+            })
           
-          best_frac_index <- which.min(avg_mse_per_frac)
+            best_frac_index <- which.min(avg_mse_per_frac)
           
-          if (length(best_frac_index) == 0 || is.infinite(avg_mse_per_frac[best_frac_index])) {
-              message("Warning: LOESS selection failed. Defaulting to 0.3")
-              loess_frac <- 0.3
-          } else {
-              loess_frac <- candidate_fracs[best_frac_index]
-              message(sprintf("Selected optimal LOESS fraction: %.2f (Avg. MSE=%.4f)", loess_frac, min(avg_mse_per_frac, na.rm=TRUE)))
-          }
-      } else {
-          loess_frac <- as.numeric(loess_frac_str)
-      }
+            if (length(best_frac_index) == 0 || is.infinite(avg_mse_per_frac[best_frac_index])) {
+                 message("Warning: LOESS selection failed. Defaulting to 0.3")
+                loess_frac <- 0.3
+            } else {
+                loess_frac <- candidate_fracs[best_frac_index]
+                message(sprintf("Selected optimal LOESS fraction: %.2f (Avg. MSE=%.4f)", loess_frac, min(avg_mse_per_frac, na.rm=TRUE)))
+            }
+        } else {
+            loess_frac <- as.numeric(loess_frac_str)
+        }
 
-      message(sprintf("Fitting LOESS model (span = %.2f) using %d baseline windows.", loess_frac, nrow(baseline_windows_for_fit)))
+        message(sprintf("Fitting LOESS model (span = %.2f) using %d baseline windows.", loess_frac, nrow(baseline_windows_for_fit)))
       
-      gc_model <- loess(depth ~ gc, data = baseline_windows_for_fit, span = loess_frac,
-                        control = loess.control(surface = "direct"))
+        gc_model <- tryCatch(
+            loess(depth ~ gc, data = baseline_windows_for_fit, 
+            span = loess_frac, 
+            control = loess.control(surface = "direct")),
+            error = function(e) {
+            message("Error fitting LOESS model: ", e$message)
+            return(NULL)
+            }
+        )
+    
+        if (!is.null(gc_model)) {
+            window_data$expected_depth <- predict(gc_model, newdata = window_data)
+            global_median_depth <- median(window_data$depth[window_data$depth > 0], na.rm = TRUE)
 
-      window_data$expected_depth <- predict(gc_model, newdata = window_data)
-      window_data$expected_depth[is.na(window_data$expected_depth) | window_data$expected_depth <= 0] <- 0.01
+            message(sprintf("Global median depth: %.3f", global_median_depth))
 
-      global_median_depth <- median(window_data$depth[window_data$depth > 0], na.rm = TRUE)
+            min_threshold <- 0.01
+
+            window_data$depth_to_use <- ifelse(
+                is.na(window_data$expected_depth) | window_data$expected_depth < min_threshold, 
+                window_data$depth, 
+                pmax(0, window_data$depth * (global_median_depth / window_data$expected_depth)))
       
-      message(sprintf("Global median depth: %.3f", global_median_depth))
-
-      window_data$depth_to_use <- pmax(0, window_data$depth * (global_median_depth / window_data$expected_depth))
-      
-      final_norm_mode <- "GC_Corrected"
-      gc_correction_applied <- TRUE
-      message("GC correction applied successfully.")
-  }
-}
-
+            final_norm_mode <- "GC_Corrected"
+            gc_correction_applied <- TRUE
+            message("GC correction applied successfully.")
+        } else {
+            message("LOESS model fitting failed. Proceeding without GC correction.")
+            gc_correction_applied <- FALSE
+        }
+    }
+}    
 # --- Aggregate Depths and Calculate PCN  ---
 message("Aggregating depths...")
 
@@ -226,4 +240,3 @@ message(paste("Writing final report to:", output_file))
 readr::write_tsv(final_report, output_file, na = "NA")
 
 message("R script finished.")
-
