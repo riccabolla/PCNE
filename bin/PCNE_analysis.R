@@ -1,6 +1,6 @@
 #!/usr/bin/env Rscript
 
-# Version: 2.0.0 compatible with PCNE v3.0.0
+# Version: 2.1.0 compatible with PCNE v3.1.0
 
 suppressPackageStartupMessages(library(readr))
 suppressPackageStartupMessages(library(dplyr))
@@ -143,7 +143,7 @@ plasmid_raw_report <- contig_summary %>%
     mutate(
         chromosome_depth = baseline_depth,
         normalization_mode = final_norm_mode,
-        estimated_copy_number = ifelse(baseline_depth > 0, round(median_depth / baseline_depth, 2), NA_real_)
+        estimated_copy_number = if(baseline_depth > 0) round(median_depth / baseline_depth, 2) else NA_real_
     ) %>%
     rename(plasmid_contig = contig,
            plasmid_length = length,
@@ -154,8 +154,8 @@ if (aggregate_flag) {
     message("Aggregating results for all plasmid contigs...")
     agg_data <- plasmid_raw_report %>%
         summarise(
-            total_length = sum(length, na.rm = TRUE),
-            total_weighted_depth = sum(median_depth * length, na.rm = TRUE)
+            total_length = sum(plasmid_length, na.rm = TRUE),
+            total_weighted_depth = sum(plasmid_depth * plasmid_length, na.rm = TRUE)
         )
     agg_median_depth <- if(agg_data$total_length > 0) agg_data$total_weighted_depth / agg_data$total_length else 0
     agg_plasmid_id <- if (nzchar(plasmid_input_filename)) sub("\\.[^.]*$", "", basename(plasmid_input_filename)) else "Aggregated_Plasmid"
