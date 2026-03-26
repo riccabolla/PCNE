@@ -58,8 +58,8 @@ conda activate pcne_env
 You can use [Docker](https://hub.docker.com/repository/docker/riccabolla/pcne/general):
 
 ```
-docker pull riccabolla/pcne:v3.0.0
-docker run riccabolla/pcne:v3.0.0 pcne -h
+docker pull riccabolla/pcne:v3.1.0
+docker run riccabolla/pcne:v3.1.0 pcne -h
 ```
 ### Ubuntu
 ```
