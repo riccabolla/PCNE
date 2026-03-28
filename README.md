@@ -1,7 +1,8 @@
-[![Anaconda-Server Badge](https://anaconda.org/bioconda/pcne/badges/version.svg)](https://anaconda.org/bioconda/pcne)
-[![Anaconda-Server Badge](https://anaconda.org/bioconda/pcne/badges/downloads.svg)](https://anaconda.org/bioconda/pcne)
+[![Version](https://img.shields.io/github/v/release/riccabolla/pcne)](https://github.com/riccabolla/pcne/releases)
+[![Conda Downloads](https://img.shields.io/conda/dn/bioconda/pcne)](https://anaconda.org/bioconda/pcne)
 [![Anaconda-Server Badge](https://anaconda.org/bioconda/pcne/badges/latest_release_date.svg)](https://anaconda.org/bioconda/pcne)
 [![Anaconda-Server Badge](https://anaconda.org/bioconda/pcne/badges/license.svg)](https://anaconda.org/bioconda/pcne)
+
 
 # Plasmid Copy Number Estimator
 **P**lasmid **C**opy **N**umber **E**stimator (**PCNE**) is a simple tool to estimate the copy number of plasmid from an assembled genome. <br>
@@ -9,7 +10,7 @@
 Determining the copy number of plasmids is essential for understanding plasmid biology, evolution, and the dosage of plasmid-borne genes (e.g., antimicrobial resistance genes). PCNE automates this estimation from standard sequencing file formats. <br>
 
 ## Requirements
-It requires either pre-separated chromosome and plasmid FASTA files or a complete genome assembly FASTA with corresponding contig lists. It also allows to use as plasmid input a multi-fasta file with one contig per plasmid, a complete assembled plasmid (1 contig), or a draft assembled plasmid (one plasmid with multiple contigs). <br>
+It requires either pre-separated chromosome and plasmid FASTA files or a complete genome assembly FASTA with corresponding contig lists. It also allows the use of a multi-fasta file with one contig per plasmid, a complete assembled plasmid (1 contig), or a draft assembled plasmid (one plasmid with multiple contigs). <br>
 You can esily get them using tools like [Platon](https://github.com/oschwengers/platon), [MOB-Suite](https://github.com/phac-nml/mob-suite), [PlasmidFinder](https://github.com/genomicepidemiology/plasmidfinder)...
 
 ## Citation
