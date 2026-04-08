@@ -59,8 +59,8 @@ conda activate pcne_env
 You can use [Docker](https://hub.docker.com/repository/docker/riccabolla/pcne/general):
 
 ```
-docker pull riccabolla/pcne:v3.1.0
-docker run riccabolla/pcne:v3.1.0 pcne -h
+docker pull riccabolla/pcne:v3.2.0
+docker run riccabolla/pcne:v3.2.0 pcne -h
 ```
 ### Ubuntu
 ```
@@ -78,11 +78,14 @@ pcne -c <chromosome.fasta> -p <plasmid.fasta> -r <reads_R1.fastq.gz> -R <reads_R
 
 #long reads
 pcne_long --c <chromosome.fasta> -p <plasmid.fasta> -r <reads.fastq.gz> [-t <threads>] [-o <output_prefix>]
+
+#with multiple plasmids
+pcne_long --c <chromosome.fasta> -p <plasmid_*.fasta> -r <reads.fastq.gz> [-t <threads>] [-o <output_prefix>]
 ```
 ## Command line options
 ```
   -c, --chromosome <file>    Path to chromosome FASTA file (Required)  
-  -p, --plasmid <file>       Path to plasmid FASTA file (Required)  
+  -p, --plasmid <file>       Path to one or more plasmid FASTA files (Required)  
                              Use with `--single-plasmid` if file contains one fragmented plasmid  
   -a, --assembly <file>      Path to the assembled genome FASTA file (Required)  
   -C, --chr-list <file>      Path to file containing chromosome contig names (Required)  
