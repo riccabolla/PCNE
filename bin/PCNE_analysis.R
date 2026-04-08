@@ -298,30 +298,64 @@ if (generate_plot_flag && nrow(final_report) > 0) {
 # --- Generate GC Diagnostic Plot ---
 if (gc_correction_applied && generate_gc_plot_flag && !is.null(gc_model)) {
   output_prefix <- sub("_results\\.tsv$", "", output_file)
-  gc_plot_file  <- paste0(output_prefix, "_gcplot.png")
-  message(paste("Generating GC diagnostic plot to:", gc_plot_file))
 
-  data_for_plot <- window_data %>%
-    filter(depth > 0) %>%
-    mutate(source = if_else(contig %in% chr_names, "Baseline", "Plasmid"))
-  data_for_plot$predicted_depth <- predict(gc_model, newdata = data_for_plot)
+  # Helper that builds and saves one GC plot for a given set of plasmid contigs
+  save_gc_plot <- function(plasmid_contigs, plot_suffix, group_label) {
+    gc_plot_file <- paste0(output_prefix, "_", plot_suffix, "_gcplot.png")
+    message(paste("Generating GC diagnostic plot:", gc_plot_file))
 
-  p_gc <- ggplot(data_for_plot, aes(x = gc, y = depth)) +
-    geom_point(aes(color = source), alpha = 0.3, size = 0.5) +
-    scale_color_manual(values = c("Baseline" = "grey50", "Plasmid" = "dodgerblue")) +
-    geom_line(aes(y = predicted_depth), color = "red", linewidth = 1) +
-    scale_y_log10() +
-    labs(
-      title    = "GC Content vs. Read Depth",
-      subtitle = paste("Sample:", sample_name, "| LOESS span =", round(loess_frac, 2)),
-      x        = "GC Fraction",
-      y        = "Mean Depth per Window (Log Scale)"
-    ) +
-    theme_classic(base_size = 11) +
-    guides(color = guide_legend(override.aes = list(alpha = 1, size = 2)))
+    data_for_plot <- window_data %>%
+      filter(depth > 0) %>%
+      mutate(source = case_when(
+        contig %in% chr_names         ~ "Baseline",
+        contig %in% plasmid_contigs   ~ "Plasmid",
+        TRUE                          ~ NA_character_
+      )) %>%
+      filter(!is.na(source))   # drop contigs that belong to other groups
+    data_for_plot$predicted_depth <- predict(gc_model, newdata = data_for_plot)
 
-  ggsave(filename = gc_plot_file, plot = p_gc, width = 7, height = 5, dpi = 300)
-  message("GC diagnostic plot saved successfully.")
+    p_gc <- ggplot(data_for_plot, aes(x = gc, y = depth)) +
+      geom_point(aes(color = source), alpha = 0.3, size = 0.5) +
+      scale_color_manual(values = c("Baseline" = "grey50", "Plasmid" = "dodgerblue")) +
+      geom_line(aes(y = predicted_depth), color = "red", linewidth = 1) +
+      scale_y_log10() +
+      labs(
+        title    = "GC Content vs. Read Depth",
+        subtitle = paste("Sample:", sample_name,
+                         "| Plasmid:", group_label,
+                         "| LOESS span =", round(loess_frac, 2)),
+        x        = "GC Fraction",
+        y        = "Mean Depth per Window (Log Scale)"
+      ) +
+      theme_classic(base_size = 11) +
+      guides(color = guide_legend(override.aes = list(alpha = 1, size = 2)))
+
+    ggsave(filename = gc_plot_file, plot = p_gc, width = 7, height = 5, dpi = 300)
+    message("  Saved: ", gc_plot_file)
+  }
+
+  if (multi_fasta_mode) {
+    # One plot per source FASTA group
+    groups <- unique(pls_groups$group)
+    for (grp in groups) {
+      grp_contigs <- pls_groups$contig[pls_groups$group == grp]
+      save_gc_plot(plasmid_contigs = grp_contigs,
+                   plot_suffix     = grp,
+                   group_label     = grp)
+    }
+  } else if (aggregate_flag) {
+    # Single plot, all plasmid contigs together
+    save_gc_plot(plasmid_contigs = plasmid_names,
+                 plot_suffix     = "",
+                 group_label     = sub("\\.[^.]*$", "", basename(plasmid_input_filename)))
+  } else {
+    # Default single-FASTA: one plot per contig, matching one row per contig in the report
+    for (ctg in plasmid_names) {
+      save_gc_plot(plasmid_contigs = ctg,
+                   plot_suffix     = ctg,
+                   group_label     = ctg)
+    }
+  }
 }
 
 # --- Write Output ---
