@@ -300,7 +300,7 @@ fi
 echo "Done." | tee -a "${LOG_FILE}"
 
 # --- Print Configuration ---
-echo -e "${BLUE_BOLD}--- Starting Plasmid Copy Number Estimation v${VERSION} ---${RESET}" | tee -a "${LOG_FILE}"
+echo -e "${BLUE_BOLD}--- Starting Plasmid Copy Number Estimator v${VERSION} ---${RESET}" | tee -a "${LOG_FILE}"
 printf "%-25s : %s\n" "Mode"          "${MODE}"                                                              | tee -a "${LOG_FILE}"
 printf "%-25s : %s\n" "Reads R1"      "${READS_R1}"                                                          | tee -a "${LOG_FILE}"
 printf "%-25s : %s\n" "Reads R2"      "${READS_R2}"                                                          | tee -a "${LOG_FILE}"
@@ -436,5 +436,8 @@ if [[ -n $GC_PLOT_FILE && -f "${GC_PLOT_FILE}" ]]; then
     echo -e "${GREEN}   GC Plot file:       ${GC_PLOT_FILE}${RESET}" | tee -a "${LOG_FILE}"
 fi
 echo -e "${BLUE_BOLD}-----------------------------------------------${RESET}" | tee -a "${LOG_FILE}"
+
+echo "Remember to cite:"
+echo "Bollini R, Cento V. PCNE: A Tool for Plasmid Copy Number Estimation. Bioinformatics and Biology Insights. 2026;20. doi:10.1177/11779322251410037" 
 
 exit 0
