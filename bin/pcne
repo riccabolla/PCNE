@@ -22,7 +22,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-VERSION="3.1.0" 
+VERSION="3.2.0"
 
 set -e
 set -o pipefail
@@ -34,7 +34,7 @@ cat << "EOF"
    | |_) | |   |  \| |  _|
    |  __/| |___| |\  | |___
    |_|    \____|_| \_|_____|
-   Plasmid Copy Number Estimator v3.1.0
+   Plasmid Copy Number Estimator v3.2.0
    by riccabolla
 
 EOF
@@ -58,12 +58,14 @@ GENERATE_PLOT=0
 AGGREGATE_PLASMIDS=0
 GC_CORRECTION=0
 GC_WINDOW=1000
-GC_LOESS_FRAC="auto" 
+GC_LOESS_FRAC="auto"
 GENERATE_GC_PLOT=0
 
 # --- File Path Variables ---
 CHR_FASTA=""
-PLS_FASTA=""
+PLS_FASTAS=()          # array: one entry per -p argument
+PLS_FASTA=""           # effective plasmid FASTA (single or merged)
+PLS_GROUPS_FILE=""     # set only when multiple FASTAs are provided
 ASSEMBLY_FASTA=""
 CHR_LIST_FILE=""
 PLS_LIST_FILE=""
@@ -86,31 +88,45 @@ usage() {
   echo -e "  ${script_name} [Mode 1 | Mode 2] [Common Required] [Optional]"
   echo -e "\n  ${BLUE_BOLD}Input Modes:${RESET}"
   echo -e "    ${CYAN_BOLD}Mode 1:${RESET}"
-  echo "      -c, --chromosome FILE : Path to chromosome contigs FASTA file (Required)"
-  echo "      -p, --plasmid FILE    : Path to plasmid contigs FASTA file (Required)"
+  echo "      -c, --chromosome FILE      : Path to chromosome contigs FASTA file (Required)"
+  echo "      -p, --plasmid FILE [...]   : Path to one or more plasmid FASTA files (Required)"
+  echo "                                   Accepts multiple files or globs (e.g. plasmid_*.fasta)"
   echo -e "    ${CYAN_BOLD}Mode 2:${RESET}"
-  echo "      -a, --assembly FILE   : Path to the assembled genome FASTA file (Required)"
-  echo "      -P, --plasmid-list FILE : Path to file containing plasmid contig names (Required)"
-  echo "      -C, --chr-list FILE   : Path to file containing chromosome contig names (Optional)"
+  echo "      -a, --assembly FILE        : Path to the assembled genome FASTA file (Required)"
+  echo "      -P, --plasmid-list FILE    : Path to file containing plasmid contig names (Required)"
+  echo "      -C, --chr-list FILE        : Path to file containing chromosome contig names (Optional)"
   echo -e "\n  ${BLUE_BOLD}Common Required:${RESET}"
-  echo "      -r, --reads1 FILE     : Path to forward reads (FASTQ format, e.g., R1) (Mandatory)"
-  echo "      -R, --reads2 FILE     : Path to reverse reads (FASTQ format, e.g., R2) (Mandatory)"
+  echo "      -r, --reads1 FILE          : Path to forward reads (FASTQ format, e.g., R1) (Mandatory)"
+  echo "      -R, --reads2 FILE          : Path to reverse reads (FASTQ format, e.g., R2) (Mandatory)"
   echo -e "\n  ${BLUE_BOLD}Optional Analysis:${RESET}"
-  echo "      --gc-correction       : Enable GC correction"
-  echo "      --gc-window INT       : Window size for GC analysis (default: ${GC_WINDOW})"
-  echo "      --gc-frac FLOAT|auto  : LOESS smoothing fraction (default: ${GC_LOESS_FRAC})"
+  echo "      --gc-correction            : Enable GC correction"
+  echo "      --gc-window INT            : Window size for GC analysis (default: ${GC_WINDOW})"
+  echo "      --gc-frac FLOAT|auto       : LOESS smoothing fraction (default: ${GC_LOESS_FRAC})"
   echo -e "\n  ${BLUE_BOLD}Optional Filtering & Plotting:${RESET}"
-  echo "      -Q, --min-quality INT : Minimum mapping quality (MQ) (default: ${MIN_MAPQ})"
-  echo "      -F, --filter INT      : SAM flag (default: ${SAM_FILTER_FLAG})"
-  echo "      -l, --plot            : Generate a bar plot for copy numbers (<prefix>_plot.png)"
-  echo "      --gc-plot FILE        : Save the GC vs. Depth diagnostic plot to this file."
+  echo "      -Q, --min-quality INT      : Minimum mapping quality (MQ) (default: ${MIN_MAPQ})"
+  echo "      -F, --filter INT           : SAM flag (default: ${SAM_FILTER_FLAG})"
+  echo "      -l, --plot                 : Generate a bar plot for copy numbers (<prefix>_plot.png)"
+  echo "      --gc-plot FILE             : Save the GC vs. Depth diagnostic plot to this file."
   echo -e "\n  ${BLUE_BOLD}Other:${RESET}"
-  echo "      -s, --single-plasmid  : Treat all contigs in '-p' FASTA as one fragmented plasmid (Mode 1 only)"
-  echo "      -t, --threads INT     : Number of threads (default: ${THREADS})"
-  echo "      -o, --output STR      : Prefix for output files (default: ${OUTPUT_PREFIX})"
-  echo "      -k, --keep-intermediate : Keep intermediate files [Default: OFF]"
-  echo "      -v, --version         : Display version information and exit"
-  echo "      -h, --help            : Display this help message and exit"
+  echo "      -s, --single-plasmid       : Treat all contigs in '-p' as one fragmented plasmid"
+  echo "                                   (Mode 1, single FASTA only; ignored for multiple FASTAs)"
+  echo "      -t, --threads INT          : Number of threads (default: ${THREADS})"
+  echo "      -o, --output STR           : Prefix for output files (default: ${OUTPUT_PREFIX})"
+  echo "      -k, --keep-intermediate    : Keep intermediate files [Default: OFF]"
+  echo "      -v, --version              : Display version information and exit"
+  echo "      -h, --help                 : Display this help message and exit"
+  echo -e "\n  ${BLUE_BOLD}Examples:${RESET}"
+  echo "      # Single plasmid FASTA"
+  echo "      ${script_name} -c chr.fasta -p plasmid.fasta -r R1.fq.gz -R R2.fq.gz"
+  echo ""
+  echo "      # Multiple plasmid FASTAs via glob"
+  echo "      ${script_name} -c chr.fasta -p plasmid_*.fasta -r R1.fq.gz -R R2.fq.gz"
+  echo ""
+  echo "      # Multiple plasmid FASTAs explicit"
+  echo "      ${script_name} -c chr.fasta -p pOXA.fasta pTEM.fasta pCTX.fasta -r R1.fq.gz -R R2.fq.gz"
+  echo ""
+  echo "      # Single fragmented plasmid"
+  echo "      ${script_name} -c chr.fasta -p fragmented.fasta --single-plasmid -r R1.fq.gz -R R2.fq.gz"
 }
 
 # --- Parse Arguments ---
@@ -118,7 +134,13 @@ while [[ $# -gt 0 ]]; do
     key="$1"
     case ${key} in
         -c|--chromosome) CHR_FASTA="$2"; shift 2 ;;
-        -p|--plasmid) PLS_FASTA="$2"; shift 2 ;;
+        -p|--plasmid)
+            shift
+            while [[ $# -gt 0 && "$1" != -* ]]; do
+                PLS_FASTAS+=("$1")
+                shift
+            done
+            ;;
         -a|--assembly) ASSEMBLY_FASTA="$2"; shift 2 ;;
         -C|--chr-list) CHR_LIST_FILE="$2"; shift 2 ;;
         -P|--plasmid-list) PLS_LIST_FILE="$2"; shift 2 ;;
@@ -131,19 +153,21 @@ while [[ $# -gt 0 ]]; do
         -k|--keep-intermediate) KEEP_INTERMEDIATE=1; shift ;;
         -l|--plot) GENERATE_PLOT=1; shift ;;
         -s|--single-plasmid) AGGREGATE_PLASMIDS=1; shift ;;
-        --gc-correction) GC_CORRECTION=1; shift;;
-        --gc-window) GC_WINDOW="$2"; shift 2;;
-        --gc-frac) GC_LOESS_FRAC="$2"; shift 2;;
-        --gc-plot) GENERATE_GC_PLOT=1; shift;;
+        --gc-correction) GC_CORRECTION=1; shift ;;
+        --gc-window) GC_WINDOW="$2"; shift 2 ;;
+        --gc-frac) GC_LOESS_FRAC="$2"; shift 2 ;;
+        --gc-plot) GENERATE_GC_PLOT=1; shift ;;
         -v|--version) echo "$(basename "$0") version ${VERSION}"; exit 0 ;;
         -h|--help) usage; exit 0 ;;
-        *) echo -e "${RED_BOLD}Error: Unknown option: $1${RESET}" >&2; usage; exit 1;;
+        *) echo -e "${RED_BOLD}Error: Unknown option: $1${RESET}" >&2; usage; exit 1 ;;
     esac
 done
 
 # --- Define File Names ---
 LOG_FILE="${OUTPUT_PREFIX}.log"
 COMBINED_REF="${OUTPUT_PREFIX}_combined_reference.fasta"
+COMBINED_PLS_FASTA="${OUTPUT_PREFIX}_combined_plasmids.fasta"
+PLS_GROUPS_FILE="${OUTPUT_PREFIX}_pls_groups.tsv"
 ALIGNMENT_REF=""
 SORTED_BAM="${OUTPUT_PREFIX}_alignment.sorted.bam"
 FILTERED_BAM="${OUTPUT_PREFIX}_alignment.filtered.bam"
@@ -153,7 +177,7 @@ WINDOWS_BED="${OUTPUT_PREFIX}.windows.bed"
 WINDOWS_GC="${OUTPUT_PREFIX}.windows.gc.tsv"
 WINDOWS_COV="${OUTPUT_PREFIX}.windows.cov.tsv"
 GC_PLOT_FILE="${OUTPUT_PREFIX}_gcplot.png"
-WINDOWS_DATA="${OUTPUT_PREFIX}.windows.gc_depth.tsv" 
+WINDOWS_DATA="${OUTPUT_PREFIX}.windows.gc_depth.tsv"
 chr_name_list_arg=""
 pls_name_list_arg=""
 tmp_chr_list="${OUTPUT_PREFIX}_chr_names.tmp"
@@ -168,45 +192,96 @@ echo "Command: ${cmd_args_quoted}" >> "${LOG_FILE}"
 echo "--------------------" >> "${LOG_FILE}"
 
 # --- Validate Arguments ---
-if [[ -n "${CHR_FASTA}" && -n "${PLS_FASTA}" ]]; then
-    MODE=1;
+if [[ -n "${CHR_FASTA}" && ${#PLS_FASTAS[@]} -gt 0 ]]; then
+    MODE=1
 elif [[ -n "${ASSEMBLY_FASTA}" && -n "${PLS_LIST_FILE}" ]]; then
-    MODE=2;
+    MODE=2
 else
-    MODE=0;
+    MODE=0
 fi
-if [[ ${MODE} -eq 0 ]]; then echo -e "${RED_BOLD}Error: Invalid or incomplete input files.${RESET}" >&2; usage; exit 1; fi
-if [[ -z "${READS_R1}" || -z "${READS_R2}" ]]; then echo -e "${RED_BOLD}Error: Missing read files (-r and -R).${RESET}" >&2; usage; exit 1; fi
+
+if [[ ${MODE} -eq 0 ]]; then
+    echo -e "${RED_BOLD}Error: Invalid or incomplete input files.${RESET}" >&2; usage; exit 1
+fi
+if [[ -z "${READS_R1}" || -z "${READS_R2}" ]]; then
+    echo -e "${RED_BOLD}Error: Missing read files (-r and -R).${RESET}" >&2; usage; exit 1
+fi
 
 # --- Check Input Files ---
 echo -e "Checking input files..." | tee -a "${LOG_FILE}"
 if [ ! -f "${READS_R1}" ]; then echo -e "${RED_BOLD}Error: Reads R1 file not found: ${READS_R1}${RESET}" >&2; exit 1; fi
 if [ ! -f "${READS_R2}" ]; then echo -e "${RED_BOLD}Error: Reads R2 file not found: ${READS_R2}${RESET}" >&2; exit 1; fi
 if [[ ${MODE} -eq 1 ]]; then
-    if [ ! -f "${CHR_FASTA}" ]; then echo -e "${RED_BOLD}Error: Chromosome FASTA file (-c) not found: ${CHR_FASTA}${RESET}" >&2; exit 1; fi
-    if [ ! -f "${PLS_FASTA}" ]; then echo -e "${RED_BOLD}Error: Plasmid FASTA file (-p) not found: ${PLS_FASTA}${RESET}" >&2; exit 1; fi
+    if [ ! -f "${CHR_FASTA}" ]; then
+        echo -e "${RED_BOLD}Error: Chromosome FASTA file (-c) not found: ${CHR_FASTA}${RESET}" >&2; exit 1
+    fi
+    for _pf in "${PLS_FASTAS[@]}"; do
+        if [ ! -f "${_pf}" ]; then
+            echo -e "${RED_BOLD}Error: Plasmid FASTA file (-p) not found: ${_pf}${RESET}" >&2; exit 1
+        fi
+    done
 elif [[ ${MODE} -eq 2 ]]; then
-    if [ ! -f "${ASSEMBLY_FASTA}" ]; then echo -e "${RED_BOLD}Error: Assembly FASTA file (-a) not found: ${ASSEMBLY_FASTA}${RESET}" >&2; exit 1; fi
-    if [ ! -f "${PLS_LIST_FILE}" ]; then echo -e "${RED_BOLD}Error: Plasmid list file (-P) not found: ${PLS_LIST_FILE}${RESET}" >&2; exit 1; fi
+    if [ ! -f "${ASSEMBLY_FASTA}" ]; then
+        echo -e "${RED_BOLD}Error: Assembly FASTA file (-a) not found: ${ASSEMBLY_FASTA}${RESET}" >&2; exit 1
+    fi
+    if [ ! -f "${PLS_LIST_FILE}" ]; then
+        echo -e "${RED_BOLD}Error: Plasmid list file (-P) not found: ${PLS_LIST_FILE}${RESET}" >&2; exit 1
+    fi
 fi
 echo -e "Done." | tee -a "${LOG_FILE}"
 
 # --- Check Dependencies ---
 echo -e "Checking dependencies..." | tee -a "${LOG_FILE}"
-command -v bwa >/dev/null 2>&1 || { echo -e >&2 "${RED_BOLD}Error: bwa not found in PATH.${RESET}"; exit 1; }
+command -v bwa      >/dev/null 2>&1 || { echo -e >&2 "${RED_BOLD}Error: bwa not found in PATH.${RESET}";      exit 1; }
 command -v samtools >/dev/null 2>&1 || { echo -e >&2 "${RED_BOLD}Error: samtools not found in PATH.${RESET}"; exit 1; }
-command -v Rscript >/dev/null 2>&1 || { echo -e >&2 "${RED_BOLD}Error: Rscript not found in PATH.${RESET}"; exit 1; }
+command -v Rscript  >/dev/null 2>&1 || { echo -e >&2 "${RED_BOLD}Error: Rscript not found in PATH.${RESET}";  exit 1; }
 command -v bedtools >/dev/null 2>&1 || { echo -e >&2 "${RED_BOLD}Error: bedtools not found in PATH.${RESET}"; exit 1; }
 echo -e "Done." | tee -a "${LOG_FILE}"
 
-# --- Prepare Contig Lists ---
+# --- Prepare Plasmid List (Mode 1) ---
 echo -e "Preparing plasmid list..." | tee -a "${LOG_FILE}"
 if [[ ${MODE} -eq 1 ]]; then
-    grep '^>' "${PLS_FASTA}" | sed 's/>//; s/ .*//' > "${tmp_pls_list}"
-    pls_name_list_arg="${tmp_pls_list}"
+    if [[ ${#PLS_FASTAS[@]} -eq 1 ]]; then
+        # Single FASTA
+        PLS_FASTA="${PLS_FASTAS[0]}"
+        grep '^>' "${PLS_FASTA}" | sed 's/>//; s/ .*//' > "${tmp_pls_list}"
+        pls_name_list_arg="${tmp_pls_list}"
+        PLS_GROUPS_FILE=""   # not used; R uses existing single-file logic
+        echo -e "  Single plasmid FASTA: ${PLS_FASTA}" | tee -a "${LOG_FILE}"
+    else
+        # ── Multiple FASTAs: merge + build contig→group mapping ─────────────
+        echo -e "  Multiple plasmid FASTAs detected (${#PLS_FASTAS[@]} files). Merging..." | tee -a "${LOG_FILE}"
+        : > "${COMBINED_PLS_FASTA}"
+        echo -e "contig\tgroup" > "${PLS_GROUPS_FILE}"
+        : > "${tmp_pls_list}"
+        for _pf in "${PLS_FASTAS[@]}"; do
+            # Derive a clean group name from the filename
+            _group=$(basename "${_pf}")
+            _group="${_group%.*}"
+            _group="${_group//[^A-Za-z0-9_.-]/_}"
+            echo -e "  Adding: ${_pf}  →  group '${_group}'" | tee -a "${LOG_FILE}"
+            cat "${_pf}" >> "${COMBINED_PLS_FASTA}"
+            grep '^>' "${_pf}" | sed 's/>//; s/ .*//' | while read -r _contig; do
+                echo -e "${_contig}\t${_group}" >> "${PLS_GROUPS_FILE}"
+                echo "${_contig}" >> "${tmp_pls_list}"
+            done
+        done
+        PLS_FASTA="${COMBINED_PLS_FASTA}"
+        pls_name_list_arg="${tmp_pls_list}"
+        # In multi-file mode each file is already one "unit"; --single-plasmid
+        # would be ambiguous so it is silently overridden with a warning.
+        if [[ ${AGGREGATE_PLASMIDS} -eq 1 ]]; then
+            echo -e "Warning: --single-plasmid is ignored when multiple -p files are provided;" \
+                    "each file is treated as one plasmid." | tee -a "${LOG_FILE}"
+            AGGREGATE_PLASMIDS=0
+        fi
+    fi
 elif [[ ${MODE} -eq 2 ]]; then
     pls_name_list_arg="${PLS_LIST_FILE}"
 fi
+echo "Done." | tee -a "${LOG_FILE}"
+
+# --- Prepare Chromosome List ---
 echo -e "Preparing chromosome list..." | tee -a "${LOG_FILE}"
 if [[ ${MODE} -eq 1 ]]; then
     grep '^>' "${CHR_FASTA}" | sed 's/>//; s/ .*//' > "${tmp_chr_list}"
@@ -225,52 +300,75 @@ fi
 echo "Done." | tee -a "${LOG_FILE}"
 
 # --- Print Configuration ---
-echo -e "${BLUE_BOLD}--- Starting Plasmid Copy Number Estimation v${VERSION} ---${RESET}" | tee -a "${LOG_FILE}"
-printf "%-25s : %s\n" "Mode" "${MODE}" | tee -a "${LOG_FILE}"
-printf "%-25s : %s\n" "Reads R1" "${READS_R1}" | tee -a "${LOG_FILE}"
-printf "%-25s : %s\n" "Reads R2" "${READS_R2}" | tee -a "${LOG_FILE}"
-printf "%-25s : %s\n" "Threads" "${THREADS}" | tee -a "${LOG_FILE}"
-printf "%-25s : %s\n" "Output Prefix" "${OUTPUT_PREFIX}" | tee -a "${LOG_FILE}"
-printf "%-25s : %s\n" "GC Correction" "$(if [[ $GC_CORRECTION -eq 1 ]]; then echo "Enabled (LOESS)"; else echo "Disabled"; fi)" | tee -a "${LOG_FILE}"
+echo -e "${BLUE_BOLD}--- Starting Plasmid Copy Number Estimator v${VERSION} ---${RESET}" | tee -a "${LOG_FILE}"
+printf "%-25s : %s\n" "Mode"          "${MODE}"                                                              | tee -a "${LOG_FILE}"
+printf "%-25s : %s\n" "Reads R1"      "${READS_R1}"                                                          | tee -a "${LOG_FILE}"
+printf "%-25s : %s\n" "Reads R2"      "${READS_R2}"                                                          | tee -a "${LOG_FILE}"
+printf "%-25s : %s\n" "Threads"       "${THREADS}"                                                           | tee -a "${LOG_FILE}"
+printf "%-25s : %s\n" "Output Prefix" "${OUTPUT_PREFIX}"                                                     | tee -a "${LOG_FILE}"
+printf "%-25s : %s\n" "GC Correction" \
+    "$(if [[ $GC_CORRECTION -eq 1 ]]; then echo "Enabled (LOESS)"; else echo "Disabled"; fi)"                | tee -a "${LOG_FILE}"
 echo -e "${BLUE_BOLD}--------------------------------------------------------${RESET}" | tee -a "${LOG_FILE}"
 
-# --- Main Workflow ---
-
+# ============================================================================
 # STEP 1: Alignment and BAM Processing
+# ============================================================================
 echo -e "[Step 1/3] Preparing reference and aligning reads..." | tee -a "${LOG_FILE}"
 {
     if [[ ${MODE} -eq 1 ]]; then
         ALIGNMENT_REF="${COMBINED_REF}"
+        # PLS_FASTA already points to the single or merged plasmid FASTA
         cat "${CHR_FASTA}" "${PLS_FASTA}" > "${ALIGNMENT_REF}"
     else
         ALIGNMENT_REF="${ASSEMBLY_FASTA}"
     fi
+
     bwa index "${ALIGNMENT_REF}"
     samtools faidx "${ALIGNMENT_REF}"
 
     BAM_FOR_COVERAGE="${SORTED_BAM}"
-    bwa mem -t ${THREADS} "${ALIGNMENT_REF}" "${READS_R1}" "${READS_R2}" | samtools view -@ ${THREADS} -Sb | samtools sort -@ ${THREADS} -o "${SORTED_BAM}" -
+    bwa mem -t ${THREADS} "${ALIGNMENT_REF}" "${READS_R1}" "${READS_R2}" \
+        | samtools view -@ ${THREADS} -Sb \
+        | samtools sort -@ ${THREADS} -o "${SORTED_BAM}" -
 
     if [[ ${SAM_FILTER_FLAG} -gt 0 || ${MIN_MAPQ} -gt 0 ]]; then
         BAM_FOR_COVERAGE="${FILTERED_BAM}"
-        samtools view -@ ${THREADS} -bh -F ${SAM_FILTER_FLAG} -q ${MIN_MAPQ} -o "${BAM_FOR_COVERAGE}" "${SORTED_BAM}"
+        samtools view -@ ${THREADS} -bh \
+            -F ${SAM_FILTER_FLAG} -q ${MIN_MAPQ} \
+            -o "${BAM_FOR_COVERAGE}" "${SORTED_BAM}"
     fi
+
     samtools index -@ ${THREADS} "${BAM_FOR_COVERAGE}"
 } >> "${LOG_FILE}" 2>&1
 echo "Done." | tee -a "${LOG_FILE}"
 
+# ============================================================================
 # STEP 2: Generate Windowed Data and Run R Analysis
+# ============================================================================
 echo -e "[Step 2/3] Generating windowed data and calculating copy number..." | tee -a "${LOG_FILE}"
 {
     echo "Generating genomic window data..."
-    awk '{print $1"\t"$2}' OFS='\t' "${ALIGNMENT_REF}.fai" | bedtools makewindows -g - -w ${GC_WINDOW} > "${WINDOWS_BED}"
-    bedtools nuc -fi "${ALIGNMENT_REF}" -bed "${WINDOWS_BED}" | awk 'NR>1{print $1"\t"$2"\t"$3"\t"$5}' > "${WINDOWS_GC}"
-    bedtools coverage -mean -a "${WINDOWS_BED}" -b "${BAM_FOR_COVERAGE}" | awk '{print $1"\t"$2"\t"$3"\t"$NF}' > "${WINDOWS_COV}"
+    awk '{print $1"\t"$2}' OFS='\t' "${ALIGNMENT_REF}.fai" \
+        | bedtools makewindows -g - -w ${GC_WINDOW} > "${WINDOWS_BED}"
 
-    paste <(cut -f1-3 "${WINDOWS_GC}") <(cut -f4 "${WINDOWS_GC}") <(cut -f4 "${WINDOWS_COV}") | \
-        awk 'BEGIN{OFS="\t"; print "contig\tstart\tend\tgc\tdepth"} {print $1,$2,$3,$4,$5}' > "${WINDOWS_DATA}"
+    bedtools nuc -fi "${ALIGNMENT_REF}" -bed "${WINDOWS_BED}" \
+        | awk 'NR>1{print $1"\t"$2"\t"$3"\t"$5}' > "${WINDOWS_GC}"
+
+    bedtools coverage -mean -a "${WINDOWS_BED}" -b "${BAM_FOR_COVERAGE}" \
+        | awk '{print $1"\t"$2"\t"$3"\t"$NF}' > "${WINDOWS_COV}"
+
+    paste <(cut -f1-3 "${WINDOWS_GC}") \
+          <(cut -f4  "${WINDOWS_GC}") \
+          <(cut -f4  "${WINDOWS_COV}") \
+        | awk 'BEGIN{OFS="\t"; print "contig\tstart\tend\tgc\tdepth"} {print $1,$2,$3,$4,$5}' \
+        > "${WINDOWS_DATA}"
+
     SAMPLE_NAME="${OUTPUT_PREFIX}"
     echo "Running R analysis script..."
+
+    # Arg 12: path to groups TSV
+    _groups_arg="${PLS_GROUPS_FILE:-}"
+
     Rscript "${RSCRIPT_ANALYSIS_PATH}" \
         "${WINDOWS_DATA}" \
         "${chr_name_list_arg}" \
@@ -282,21 +380,31 @@ echo -e "[Step 2/3] Generating windowed data and calculating copy number..." | t
         "${GENERATE_PLOT}" \
         "${AGGREGATE_PLASMIDS}" \
         "${PLS_FASTA}" \
-        "${SAMPLE_NAME}" 
+        "${SAMPLE_NAME}" \
+        "${_groups_arg}"    # arg 12: empty = single-file mode (backward compat)
+
 } >> "${LOG_FILE}" 2>&1
 R_EXIT_CODE=$?
 echo "Done." | tee -a "${LOG_FILE}"
 
+# ============================================================================
 # STEP 3: Cleanup
+# ============================================================================
 echo -e "[Step 3/3] Cleaning up intermediate files..." | tee -a "${LOG_FILE}"
 rm -f "${tmp_chr_list}" "${tmp_pls_list}"
+
 if [[ ${KEEP_INTERMEDIATE} -eq 0 ]]; then
     rm -f "${SORTED_BAM}" "${SORTED_BAM}.bai"
     if [[ -f "${FILTERED_BAM}" ]]; then rm -f "${FILTERED_BAM}" "${FILTERED_BAM}.bai"; fi
     rm -f "${WINDOWS_BED}" "${WINDOWS_GC}" "${WINDOWS_COV}" "${WINDOWS_DATA}"
+    if [[ ${#PLS_FASTAS[@]} -gt 1 && -f "${COMBINED_PLS_FASTA}" ]]; then
+        rm -f "${COMBINED_PLS_FASTA}"
+    fi
+    rm -f "${PLS_GROUPS_FILE}"
     if [[ -n "${ALIGNMENT_REF}" && -f "${ALIGNMENT_REF}" ]]; then
-      rm -f "${ALIGNMENT_REF}.amb" "${ALIGNMENT_REF}.ann" "${ALIGNMENT_REF}.bwt" \
-            "${ALIGNMENT_REF}.pac" "${ALIGNMENT_REF}.sa" "${ALIGNMENT_REF}.fai" >> "${LOG_FILE}" 2>&1 || true
+        rm -f "${ALIGNMENT_REF}.amb" "${ALIGNMENT_REF}.ann" "${ALIGNMENT_REF}.bwt" \
+              "${ALIGNMENT_REF}.pac" "${ALIGNMENT_REF}.sa"  "${ALIGNMENT_REF}.fai" \
+              >> "${LOG_FILE}" 2>&1 || true
     fi
     if [[ ${MODE} -eq 1 && -n "${ALIGNMENT_REF}" && -f "${ALIGNMENT_REF}" ]]; then
         if [[ "${ALIGNMENT_REF}" == "${COMBINED_REF}" ]]; then rm -f "${ALIGNMENT_REF}"; fi
@@ -306,8 +414,8 @@ echo "Done." | tee -a "${LOG_FILE}"
 
 # --- Final Check and Exit ---
 if [ ${R_EXIT_CODE} -ne 0 ]; then
-     echo -e "${RED_BOLD}Error: R script failed with exit code ${R_EXIT_CODE}. Check ${LOG_FILE}${RESET}" >&2
-     exit 1
+    echo -e "${RED_BOLD}Error: R script failed with exit code ${R_EXIT_CODE}. Check ${LOG_FILE}${RESET}" >&2
+    exit 1
 fi
 
 # --- Elapsed Time ---
@@ -319,10 +427,17 @@ hrs=$(( duration / 3600 ))
 echo -e "${BLUE_BOLD}-----------------------------------------------${RESET}" | tee -a "${LOG_FILE}"
 echo -e "${GREEN}✅ Workflow Complete ${RESET}" | tee -a "${LOG_FILE}"
 printf "${GREEN}   Total Elapsed Time: %02d:%02d:%02d${RESET}\n" $hrs $mins $secs | tee -a "${LOG_FILE}"
-echo -e "${GREEN}   Log file: ${LOG_FILE}${RESET}" | tee -a "${LOG_FILE}"
-echo -e "${GREEN}   Final report: ${FINAL_REPORT_TSV}${RESET}" | tee -a "${LOG_FILE}"
-if [[ $GENERATE_PLOT -eq 1 && -f "${PLOT_FILE}" ]]; then echo -e "${GREEN}   Plot file: ${PLOT_FILE}${RESET}" | tee -a "${LOG_FILE}"; fi
-if [[ -n $GC_PLOT_FILE && -f "${GC_PLOT_FILE}" ]]; then echo -e "${GREEN}   GC Plot file: ${GC_PLOT_FILE}${RESET}" | tee -a "${LOG_FILE}"; fi
+echo -e "${GREEN}   Log file:           ${LOG_FILE}${RESET}" | tee -a "${LOG_FILE}"
+echo -e "${GREEN}   Final report:       ${FINAL_REPORT_TSV}${RESET}" | tee -a "${LOG_FILE}"
+if [[ $GENERATE_PLOT -eq 1 && -f "${PLOT_FILE}" ]]; then
+    echo -e "${GREEN}   Plot file:          ${PLOT_FILE}${RESET}" | tee -a "${LOG_FILE}"
+fi
+if [[ -n $GC_PLOT_FILE && -f "${GC_PLOT_FILE}" ]]; then
+    echo -e "${GREEN}   GC Plot file:       ${GC_PLOT_FILE}${RESET}" | tee -a "${LOG_FILE}"
+fi
 echo -e "${BLUE_BOLD}-----------------------------------------------${RESET}" | tee -a "${LOG_FILE}"
+
+echo "Remember to cite:"
+echo "Bollini R, Cento V. PCNE: A Tool for Plasmid Copy Number Estimation. Bioinformatics and Biology Insights. 2026;20. doi:10.1177/11779322251410037" 
 
 exit 0

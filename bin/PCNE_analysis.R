@@ -1,6 +1,6 @@
 #!/usr/bin/env Rscript
 
-# Version: 2.1.0 compatible with PCNE v3.1.0
+# Version: 2.2.0 compatible with PCNE v3.2.0
 
 suppressPackageStartupMessages(library(readr))
 suppressPackageStartupMessages(library(dplyr))
@@ -8,231 +8,354 @@ suppressPackageStartupMessages(library(ggplot2))
 
 # --- Get Command Line Arguments ---
 args <- commandArgs(trailingOnly = TRUE)
-if (length(args) != 11) {
-  stop("Usage: Rscript PCNE_analysis.R <window_data.tsv> <chr_list.txt> <plasmid_list.txt> <enable_gc_flag> <loess_frac_str> <output.tsv> <generate_gc_plot_flag> <plot_flag> <agg_flag> <plasmid_fasta> <sample_name>", call. = FALSE)
+if (length(args) < 11 || length(args) > 12) {
+  stop(paste(
+    "Usage: Rscript PCNE_analysis.R",
+    "<window_data.tsv> <chr_list.txt> <plasmid_list.txt>",
+    "<enable_gc_flag> <loess_frac_str> <output.tsv>",
+    "<generate_gc_plot_flag> <plot_flag> <agg_flag>",
+    "<plasmid_fasta> <sample_name> [pls_groups.tsv]"
+  ), call. = FALSE)
 }
 
-window_data_file <- args[1]
-chr_list_file <- args[2]
-plasmid_list_file <- args[3]
-enable_gc_flag <- as.logical(as.integer(args[4]))
-loess_frac_str <- args[5]
-output_file <- args[6]
+window_data_file      <- args[1]
+chr_list_file         <- args[2]
+plasmid_list_file     <- args[3]
+enable_gc_flag        <- as.logical(as.integer(args[4]))
+loess_frac_str        <- args[5]
+output_file           <- args[6]
 generate_gc_plot_flag <- as.logical(as.integer(args[7]))
-generate_plot_flag <- as.logical(as.integer(args[8]))
-aggregate_flag <- as.logical(as.integer(args[9]))
+generate_plot_flag    <- as.logical(as.integer(args[8]))
+aggregate_flag        <- as.logical(as.integer(args[9]))
 plasmid_input_filename <- args[10]
-sample_name <- args[11]
+sample_name           <- args[11]
+
+# Arg 12 (optional): path to contig→group mapping TSV produced
+# when multiple plasmids fasta are provided. Empty string = single-file mode.
+pls_groups_file <- if (length(args) >= 12 && nzchar(trimws(args[12]))) args[12] else NULL
+multi_fasta_mode <- !is.null(pls_groups_file)
+
+if (multi_fasta_mode) {
+  message(sprintf("Multiple plasmids fasta provided: group mapping file detected (%s).", pls_groups_file))
+}
 
 # --- Read Input Data ---
 message("Reading windowed coverage data...")
 window_data <- readr::read_tsv(window_data_file, show_col_types = FALSE) %>%
                filter(!is.na(depth), !is.na(gc), is.finite(depth), is.finite(gc), depth >= 0)
-chr_names <- readLines(chr_list_file)
+
+chr_names     <- readLines(chr_list_file)
 plasmid_names <- readLines(plasmid_list_file)
+
+# Read group mapping when running on multiple plasmids
+if (multi_fasta_mode) {
+  pls_groups <- readr::read_tsv(pls_groups_file, show_col_types = FALSE,
+                                col_types = cols(contig = col_character(),
+                                                 group  = col_character()))
+  message(sprintf("  Loaded %d contig→group mappings across %d groups.",
+                  nrow(pls_groups), n_distinct(pls_groups$group)))
+}
 
 # Initialize the column to be used for final calculations
 window_data$depth_to_use <- window_data$depth
-final_norm_mode <- "Default"
-gc_correction_applied <- FALSE
-loess_frac <- NA
-gc_model <- NULL
+final_norm_mode          <- "Default"
+gc_correction_applied    <- FALSE
+loess_frac               <- NA
+gc_model                 <- NULL
 
 # --- Perform Unified LOESS GC Correction (if enabled) ---
 if (enable_gc_flag) {
-    message("GC Correction enabled. Building LOESS model...")
+  message("GC Correction enabled. Building LOESS model...")
 
-    baseline_windows_for_fit <- window_data %>% filter(contig %in% chr_names, depth > 0)
+  baseline_windows_for_fit <- window_data %>% filter(contig %in% chr_names, depth > 0)
 
-    if(nrow(baseline_windows_for_fit) < 50) {
-        message("Warning: Too few baseline windows with coverage (<50). Skipping GC correction.")
+  if (nrow(baseline_windows_for_fit) < 50) {
+    message("Warning: Too few baseline windows with coverage (<50). Skipping GC correction.")
+  } else {
+
+    # --- Automatic LOESS Fraction Selection with K-Fold Cross-Validation ---
+    if (tolower(loess_frac_str) == "auto") {
+      message("Selecting LOESS fraction via 5-fold cross-validation...")
+      candidate_fracs <- seq(0.15, 0.75, by = 0.05)
+      k_folds <- 5
+
+      set.seed(123)
+      folds <- sample(cut(seq(1, nrow(baseline_windows_for_fit)),
+                          breaks = k_folds, labels = FALSE))
+
+      avg_mse_per_frac <- sapply(candidate_fracs, function(span) {
+        fold_mses <- sapply(1:k_folds, function(k) {
+          test_indices <- which(folds == k, arr.ind = TRUE)
+          train_data   <- baseline_windows_for_fit[-test_indices, ]
+          test_data    <- baseline_windows_for_fit[test_indices, ]
+
+          model <- tryCatch(
+            loess(depth ~ gc, data = train_data, span = span,
+                  control = loess.control(surface = "direct")),
+            error = function(e) NULL
+          )
+
+          if (is.null(model)) return(NA)
+          predictions <- predict(model, newdata = test_data)
+          mean((test_data$depth - predictions)^2, na.rm = TRUE)
+        })
+        mean(fold_mses, na.rm = TRUE)
+      })
+
+      best_frac_index <- which.min(avg_mse_per_frac)
+
+      if (length(best_frac_index) == 0 || is.infinite(avg_mse_per_frac[best_frac_index])) {
+        message("Warning: LOESS selection failed. Defaulting to 0.3")
+        loess_frac <- 0.3
+      } else {
+        loess_frac <- candidate_fracs[best_frac_index]
+        message(sprintf("Selected optimal LOESS fraction: %.2f (Avg. MSE=%.4f)",
+                        loess_frac, min(avg_mse_per_frac, na.rm = TRUE)))
+      }
     } else {
-      # --- Automatic LOESS Fraction Selection with K-Fold Cross-Validation ---
-        if (tolower(loess_frac_str) == "auto") {
-            message("Selecting LOESS fraction via 5-fold cross-validation...")
-            candidate_fracs <- seq(0.15, 0.75, by = 0.05) 
-            k_folds <- 5
-          
-            # Create folds
-            set.seed(123) # for reproducibility
-            folds <- sample(cut(seq(1, nrow(baseline_windows_for_fit)), breaks = k_folds, labels = FALSE))
-          
-            avg_mse_per_frac <- sapply(candidate_fracs, function(span) {
-                fold_mses <- sapply(1:k_folds, function(k) {
-                    test_indices <- which(folds == k, arr.ind = TRUE)
-                    train_data <- baseline_windows_for_fit[-test_indices, ]
-                    test_data <- baseline_windows_for_fit[test_indices, ]
-                  
-                    model <- tryCatch(
-                        loess(depth ~ gc, data = train_data, span = span, control = loess.control(surface = "direct")),
-                        error = function(e) NULL
-                    )
-                  
-                    if (is.null(model)) return(NA)              
-                    predictions <- predict(model, newdata = test_data)
-                    mean((test_data$depth - predictions)^2, na.rm = TRUE)
-                })
-                mean(fold_mses, na.rm = TRUE)
-            })
-          
-            best_frac_index <- which.min(avg_mse_per_frac)
-          
-            if (length(best_frac_index) == 0 || is.infinite(avg_mse_per_frac[best_frac_index])) {
-                 message("Warning: LOESS selection failed. Defaulting to 0.3")
-                loess_frac <- 0.3
-            } else {
-                loess_frac <- candidate_fracs[best_frac_index]
-                message(sprintf("Selected optimal LOESS fraction: %.2f (Avg. MSE=%.4f)", loess_frac, min(avg_mse_per_frac, na.rm=TRUE)))
-            }
-        } else {
-            loess_frac <- as.numeric(loess_frac_str)
-        }
-
-        message(sprintf("Fitting LOESS model (span = %.2f) using %d baseline windows.", loess_frac, nrow(baseline_windows_for_fit)))
-      
-        gc_model <- tryCatch(
-            loess(depth ~ gc, data = baseline_windows_for_fit, 
-            span = loess_frac, 
-            control = loess.control(surface = "direct")),
-            error = function(e) {
-            message("Error fitting LOESS model: ", e$message)
-            return(NULL)
-            }
-        )
-    
-        if (!is.null(gc_model)) {
-            window_data$expected_depth <- predict(gc_model, newdata = window_data)
-            global_median_depth <- median(window_data$depth[window_data$depth > 0], na.rm = TRUE)
-
-            message(sprintf("Global median depth: %.3f", global_median_depth))
-
-            min_threshold <- 0.01
-
-            window_data$depth_to_use <- ifelse(
-                is.na(window_data$expected_depth) | window_data$expected_depth < min_threshold, 
-                window_data$depth, 
-                pmax(0, window_data$depth * (global_median_depth / window_data$expected_depth)))
-      
-            final_norm_mode <- "GC_Corrected"
-            gc_correction_applied <- TRUE
-            message("GC correction applied successfully.")
-        } else {
-            message("LOESS model fitting failed. Proceeding without GC correction.")
-            gc_correction_applied <- FALSE
-        }
+      loess_frac <- as.numeric(loess_frac_str)
     }
-}    
-# --- Aggregate Depths and Calculate PCN  ---
-message("Aggregating depths...")
+
+    message(sprintf("Fitting LOESS model (span = %.2f) using %d baseline windows.",
+                    loess_frac, nrow(baseline_windows_for_fit)))
+
+    gc_model <- tryCatch(
+      loess(depth ~ gc, data = baseline_windows_for_fit,
+            span = loess_frac,
+            control = loess.control(surface = "direct")),
+      error = function(e) {
+        message("Error fitting LOESS model: ", e$message)
+        return(NULL)
+      }
+    )
+
+    if (!is.null(gc_model)) {
+      window_data$expected_depth <- predict(gc_model, newdata = window_data)
+      global_median_depth <- median(window_data$depth[window_data$depth > 0], na.rm = TRUE)
+      message(sprintf("Global median depth: %.3f", global_median_depth))
+
+      min_threshold <- 0.01
+      window_data$depth_to_use <- ifelse(
+        is.na(window_data$expected_depth) | window_data$expected_depth < min_threshold,
+        window_data$depth,
+        pmax(0, window_data$depth * (global_median_depth / window_data$expected_depth))
+      )
+
+      final_norm_mode       <- "GC_Corrected"
+      gc_correction_applied <- TRUE
+      message("GC correction applied successfully.")
+    } else {
+      message("LOESS model fitting failed. Proceeding without GC correction.")
+      gc_correction_applied <- FALSE
+    }
+  }
+}
+
+# --- Aggregate Per-Contig Depths ---
+message("Aggregating per-contig depths...")
 
 contig_summary <- window_data %>%
-    group_by(contig) %>%
-    summarise(
-        length = sum(end - start, na.rm = TRUE),
-        median_depth = median(depth_to_use, na.rm = TRUE),
-        .groups = 'drop'
-    )
+  group_by(contig) %>%
+  summarise(
+    length        = sum(end - start, na.rm = TRUE),
+    median_depth  = median(depth_to_use, na.rm = TRUE),
+    .groups = 'drop'
+  )
 
 baseline_windows_final <- window_data %>% filter(contig %in% chr_names)
 baseline_depth <- median(baseline_windows_final$depth_to_use, na.rm = TRUE)
-
 message(sprintf("Final baseline depth: %.3f", baseline_depth))
 
 plasmid_raw_report <- contig_summary %>%
-    filter(contig %in% plasmid_names) %>%
-    mutate(
-        chromosome_depth = baseline_depth,
-        normalization_mode = final_norm_mode,
-        estimated_copy_number = if(baseline_depth > 0) round(median_depth / baseline_depth, 2) else NA_real_
+  filter(contig %in% plasmid_names) %>%
+  mutate(
+    chromosome_depth       = baseline_depth,
+    normalization_mode     = final_norm_mode,
+    estimated_copy_number  = if (baseline_depth > 0)
+                               round(median_depth / baseline_depth, 2)
+                             else NA_real_
+  ) %>%
+  rename(plasmid_contig = contig,
+         plasmid_length = length,
+         plasmid_depth  = median_depth)
+
+# Three mutually exclusive branches:
+#   1. multi_fasta_mode : group by source FASTA file (one row per file)
+#   2. aggregate_flag : collapse all contigs into one row (--single-plasmid)
+#   3. default : one row per contig
+
+if (multi_fasta_mode) {
+  # group by source fasta
+  message("Aggregating results from multiple plasmids...")
+
+  final_report <- plasmid_raw_report %>%
+    left_join(pls_groups, by = c("plasmid_contig" = "contig")) %>%
+    group_by(group) %>%
+    summarise(
+      plasmid_length        = sum(plasmid_length, na.rm = TRUE),
+      # Length-weighted mean depth across all contigs of this file
+      plasmid_depth         = if (sum(plasmid_length, na.rm = TRUE) > 0)
+                                round(sum(plasmid_depth * plasmid_length, na.rm = TRUE) /
+                                sum(plasmid_length, na.rm = TRUE), 1)
+                              else 0,
+      chromosome_depth      = round(first(chromosome_depth), 1),
+      normalization_mode    = first(normalization_mode),
+      #n_contigs             = n(),
+      .groups = 'drop'
     ) %>%
-    rename(plasmid_contig = contig,
-           plasmid_length = length,
-           plasmid_depth = median_depth)
+    mutate(
+      sample                = sample_name,
+      plasmid_contig        = group,          # group name = source filename stem
+      estimated_copy_number = ifelse(chromosome_depth > 0,
+                                     round(plasmid_depth / chromosome_depth, 2),
+                                     NA_real_)
+    ) %>%
+    select(sample, plasmid_contig, plasmid_length, plasmid_depth,
+           chromosome_depth, normalization_mode, #n_contigs,
+           estimated_copy_number) %>%
+    arrange(desc(estimated_copy_number))
 
-# --- Handle Aggregation ---
-if (aggregate_flag) {
-    message("Aggregating results for all plasmid contigs...")
-    agg_data <- plasmid_raw_report %>%
-        summarise(
-            total_length = sum(plasmid_length, na.rm = TRUE),
-            total_weighted_depth = sum(plasmid_depth * plasmid_length, na.rm = TRUE)
-        )
-    agg_median_depth <- if(agg_data$total_length > 0) agg_data$total_weighted_depth / agg_data$total_length else 0
-    agg_plasmid_id <- if (nzchar(plasmid_input_filename)) sub("\\.[^.]*$", "", basename(plasmid_input_filename)) else "Aggregated_Plasmid"
-    
-    final_report <- tibble(
-        sample = sample_name,
-        plasmid_contig = agg_plasmid_id,
-        plasmid_length = as.integer(agg_data$total_length),
-        plasmid_depth = agg_median_depth,
-        chromosome_depth = baseline_depth,
-        normalization_mode = final_norm_mode,
-        estimated_copy_number = ifelse(baseline_depth > 0, round(agg_median_depth / baseline_depth,2), NA_real_)
+  message(sprintf("  Collapsed %d contigs into %d plasmid groups.",
+                  nrow(plasmid_raw_report), nrow(final_report)))
+
+} else if (aggregate_flag) {
+  # --single-plasmid
+  message("Aggregating results for all plasmid contigs (--single-plasmid)...")
+
+  agg_data <- plasmid_raw_report %>%
+    summarise(
+      total_length        = sum(plasmid_length, na.rm = TRUE),
+      total_weighted_depth = sum(plasmid_depth * plasmid_length, na.rm = TRUE)
     )
+
+  agg_median_depth <- if (agg_data$total_length > 0)
+                        agg_data$total_weighted_depth / agg_data$total_length
+                      else 0
+
+  agg_plasmid_id <- if (nzchar(plasmid_input_filename))
+                      sub("\\.[^.]*$", "", basename(plasmid_input_filename))
+                    else "Aggregated_Plasmid"
+
+  final_report <- tibble(
+    sample                = sample_name,
+    plasmid_contig        = agg_plasmid_id,
+    plasmid_length        = as.integer(agg_data$total_length),
+    plasmid_depth         = round(agg_median_depth, 1),
+    chromosome_depth      = round(baseline_depth, 1),
+    normalization_mode    = final_norm_mode,
+    #n_contigs             = nrow(plasmid_raw_report),
+    estimated_copy_number = ifelse(baseline_depth > 0,
+                                   round(agg_median_depth / baseline_depth, 2),
+                                   NA_real_)
+  )
+
 } else {
-    final_report <- plasmid_raw_report %>%
-      mutate(sample = sample_name) %>%
-      select(sample, plasmid_contig, plasmid_length, plasmid_depth, chromosome_depth, normalization_mode, estimated_copy_number) %>%
-      arrange(desc(estimated_copy_number))
+  # one row per contig
+  final_report <- plasmid_raw_report %>%
+    mutate(sample     = sample_name,
+           n_contigs  = 1L,
+           chromosome_depth = round(chromosome_depth, 1),
+           plasmid_depth   = round(plasmid_depth, 1)) %>%
+    select(sample, plasmid_contig, plasmid_length, plasmid_depth,
+           chromosome_depth, normalization_mode, #n_contigs,
+           estimated_copy_number) %>%
+    arrange(desc(estimated_copy_number))
 }
 
-# --- Generate Plots ---
+# --- Generate Copy Number Bar Plot ---
 if (generate_plot_flag && nrow(final_report) > 0) {
-    message("Generating final results plot...")
-    output_prefix <- sub("_results\\.tsv$", "", output_file)
-    plot_file <- paste0(output_prefix, "_plot.png")
-    
-    plot_data <- final_report %>%
-        mutate(plot_label = factor(plasmid_contig, levels = rev(final_report$plasmid_contig)))
-        
-    p <- ggplot(plot_data, aes(x = plot_label, y = estimated_copy_number)) +
-      geom_bar(stat = "identity", fill = "skyblue", color = "black", width=0.7) +
-      coord_flip() +
-      labs(
-        title = "Plasmid Copy Numbers",
-        subtitle = paste("Sample:", sample_name, "| Normalization:", final_norm_mode),
-        x = "Plasmid",
-        y = "Copy Number (Median-based)"
-      ) +
-      theme_classic(base_size = 11) +
-      theme(
-        plot.title = element_text(hjust = 0.5, face="bold"),
-        plot.subtitle = element_text(hjust = 0.5, size=9)
-      ) +
-      scale_y_continuous(expand = c(0, 0))
-      
-    ggsave(filename = plot_file, plot = p, width = 7, height = max(4, nrow(plot_data) * 0.25 + 1.5), limitsize = FALSE, dpi=300)
-    message(paste("Plot saved successfully to:", plot_file))
+  message("Generating final results plot...")
+  output_prefix <- sub("_results\\.tsv$", "", output_file)
+  plot_file <- paste0(output_prefix, "_plot.png")
+
+  plot_data <- final_report %>%
+    mutate(plot_label = factor(plasmid_contig,
+                               levels = rev(final_report$plasmid_contig)))
+
+  p <- ggplot(plot_data, aes(x = plot_label, y = estimated_copy_number)) +
+    geom_bar(stat = "identity", fill = "skyblue", color = "black", width = 0.7) +
+    coord_flip() +
+    labs(
+      title    = "Plasmid Copy Numbers",
+      subtitle = paste("Sample:", sample_name, "| Normalization:", final_norm_mode),
+      x        = "Plasmid",
+      y        = "Copy Number (Median-based)"
+    ) +
+    theme_classic(base_size = 11) +
+    theme(
+      plot.title    = element_text(hjust = 0.5, face = "bold"),
+      plot.subtitle = element_text(hjust = 0.5, size = 9)
+    ) +
+    scale_y_continuous(expand = c(0, 0))
+
+  ggsave(filename = plot_file, plot = p,
+         width    = 7,
+         height   = max(4, nrow(plot_data) * 0.25 + 1.5),
+         limitsize = FALSE, dpi = 300)
+  message(paste("Plot saved successfully to:", plot_file))
 }
 
-# --- Generate GC plot ---
+# --- Generate GC Diagnostic Plot ---
 if (gc_correction_applied && generate_gc_plot_flag && !is.null(gc_model)) {
-    output_prefix <- sub("_results\\.tsv$", "", output_file)
-    gc_plot_file <- paste0(output_prefix, "_gcplot.png")
-    
-    message(paste("Generating GC diagnostic plot to:", gc_plot_file))
-    
-    data_for_plot <- window_data %>% 
-        filter(depth > 0) %>%
-        mutate(source = if_else(contig %in% chr_names, "Baseline", "Plasmid"))
+  output_prefix <- sub("_results\\.tsv$", "", output_file)
+
+  # Helper that builds and saves one GC plot for a given set of plasmid contigs
+  save_gc_plot <- function(plasmid_contigs, plot_suffix, group_label) {
+    gc_plot_file <- paste0(output_prefix, "_", plot_suffix, "_gcplot.png")
+    message(paste("Generating GC diagnostic plot:", gc_plot_file))
+
+    data_for_plot <- window_data %>%
+      filter(depth > 0) %>%
+      mutate(source = case_when(
+        contig %in% chr_names         ~ "Baseline",
+        contig %in% plasmid_contigs   ~ "Plasmid",
+        TRUE                          ~ NA_character_
+      )) %>%
+      filter(!is.na(source))   # drop contigs that belong to other groups
     data_for_plot$predicted_depth <- predict(gc_model, newdata = data_for_plot)
-    
+
     p_gc <- ggplot(data_for_plot, aes(x = gc, y = depth)) +
       geom_point(aes(color = source), alpha = 0.3, size = 0.5) +
       scale_color_manual(values = c("Baseline" = "grey50", "Plasmid" = "dodgerblue")) +
       geom_line(aes(y = predicted_depth), color = "red", linewidth = 1) +
       scale_y_log10() +
       labs(
-        title = "GC Content vs. Read Depth ",
-        subtitle = paste("Sample:", sample_name, "| LOESS span =", round(loess_frac, 2)),
-        x = "GC Fraction",
-        y = "Mean Depth per Window (Log Scale)"
+        title    = "GC Content vs. Read Depth",
+        subtitle = paste("Sample:", sample_name,
+                         "| Plasmid:", group_label,
+                         "| LOESS span =", round(loess_frac, 2)),
+        x        = "GC Fraction",
+        y        = "Mean Depth per Window (Log Scale)"
       ) +
       theme_classic(base_size = 11) +
       guides(color = guide_legend(override.aes = list(alpha = 1, size = 2)))
-    
+
     ggsave(filename = gc_plot_file, plot = p_gc, width = 7, height = 5, dpi = 300)
-    message("GC diagnostic plot saved successfully.")
+    message("  Saved: ", gc_plot_file)
+  }
+
+  if (multi_fasta_mode) {
+    # One plot per source FASTA group
+    groups <- unique(pls_groups$group)
+    for (grp in groups) {
+      grp_contigs <- pls_groups$contig[pls_groups$group == grp]
+      save_gc_plot(plasmid_contigs = grp_contigs,
+                   plot_suffix     = grp,
+                   group_label     = grp)
+    }
+  } else if (aggregate_flag) {
+    # Single plot, all plasmid contigs together
+    save_gc_plot(plasmid_contigs = plasmid_names,
+                 plot_suffix     = "",
+                 group_label     = sub("\\.[^.]*$", "", basename(plasmid_input_filename)))
+  } else {
+    # Default single-FASTA: one plot per contig, matching one row per contig in the report
+    for (ctg in plasmid_names) {
+      save_gc_plot(plasmid_contigs = ctg,
+                   plot_suffix     = ctg,
+                   group_label     = ctg)
+    }
+  }
 }
 
 # --- Write Output ---
