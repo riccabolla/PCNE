@@ -19,7 +19,7 @@ When you use PCNE, please cite [Bollini R, Cento V. PCNE: A Tool for Plasmid Cop
 
 ## Pipeline summary
 1) Input parsing and file preparation
-2) Alignment
+2) Alignment (skipped if bam file is provided)
 3) (Optional) Alignment filtering
 4) Windowed data generation
 5) (Optional) GC correction
@@ -81,6 +81,9 @@ pcne_long --c <chromosome.fasta> -p <plasmid.fasta> -r <reads.fastq.gz> [-t <thr
 
 #with multiple plasmids
 pcne_long --c <chromosome.fasta> -p <plasmid_*.fasta> -r <reads.fastq.gz> [-t <threads>] [-o <output_prefix>]
+
+#using bam input
+pcne -c <chromosome.fasta> -p <plasmid.fasta> -b <alignment.bam> [-t <threads>] [-o output_preifx]
 ```
 ## Command line options
 ```
@@ -90,8 +93,9 @@ pcne_long --c <chromosome.fasta> -p <plasmid_*.fasta> -r <reads.fastq.gz> [-t <t
   -a, --assembly <file>      Path to the assembled genome FASTA file (Required)  
   -C, --chr-list <file>      Path to file containing chromosome contig names (Required)  
   -P, --plasmid-list <file>  Path to file containing plasmid contig names (Required)  
-  -r, --reads1 <file>        Path to forward reads (FASTQ) (Mandatory)  
-  -R, --reads2 <file>        Path to reverse reads (FASTQ) (Mandatory only for short reads)
+  -r, --reads1 <file>        Path to forward reads (FASTQ)  
+  -R, --reads2 <file>        Path to reverse reads (FASTQ) #short reads only
+  -b, --bam <file>           Path to aligned bam file
   --preset <str>             Minimap2 preset (default: map-ont) # pcne_long only
   --minimap-opts <str>       Minimap2 options (use quotes) (default: OFF) # pcne_long only
   -Q, --min-quality <int>    Minimum mapping quality (MQ) for read filtering (default: OFF)  
@@ -111,7 +115,7 @@ pcne_long --c <chromosome.fasta> -p <plasmid_*.fasta> -r <reads.fastq.gz> [-t <t
 
 ## Run the tool
 
-The tool can be use two different inputs: <br>
+The tool can use two different inputs: <br>
 **Mode 1**: it requires two separate `FASTA` files for chromosome and plasmid(s). <br>
 ```
 #Example Mode 1 for short reads
@@ -142,6 +146,8 @@ pcne \
   -t 8 \ 
   -o my_sample_pcne
 ```
+Each mode can be run providing the reads, or providing directly a prior aligned bam file.
+
 **Note**: if files are not in the working folder, provide the PATH. <br>
 
 For both modes the main output is a `TSV` file. <br>
@@ -186,6 +192,10 @@ Use this to filter out ambiguously mapped reads.
 This sets the SAM flag used to filter out reads. Use this to exclude reads with undesirable properties (ex. PCR artifacts)
 ### --minimap-opts
 Allow to use minimap2 optional parameters.
+### -b / --bam
+Passing a pre-computed BAM file reduces execution time and allows PCNE to be seamlessly integrated into modular downstream pipelines. However, please ensure:
+* **Matching Contig Names:** The contig names inside your BAM file header must strictly contain the contig names provided in your `-c` and `-p` (or `-a`) FASTA files. If they do not match, the coverage calculation will fail. It is safe if your BAM contains *more* contigs than you provide to PCNE; PCNE will correctly ignore the extra alignments.
+* **Mapping Quality Scales:** If you are applying the `-Q` (minimum MAPQ) filter, ensure your threshold matches the scoring system of the aligner that generated the BAM. 
 
 ## <a name="Next-features"></a>Next features
 Currently, no major updates are expected. <br>
