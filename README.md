@@ -193,9 +193,7 @@ This sets the SAM flag used to filter out reads. Use this to exclude reads with 
 ### --minimap-opts
 Allow to use minimap2 optional parameters.
 ### -b / --bam
-Passing a pre-computed BAM file reduces execution time and allows PCNE to be seamlessly integrated into modular downstream pipelines. However, please ensure:
-* **Matching Contig Names:** The contig names inside your BAM file header must strictly contain the contig names provided in your `-c` and `-p` (or `-a`) FASTA files. If they do not match, the coverage calculation will fail. It is safe if your BAM contains *more* contigs than you provide to PCNE; PCNE will correctly ignore the extra alignments.
-* **Mapping Quality Scales:** If you are applying the `-Q` (minimum MAPQ) filter, ensure your threshold matches the scoring system of the aligner that generated the BAM. 
+Passing a pre-computed BAM file reduces execution time and allows PCNE to be seamlessly integrated into modular downstream pipelines. 
 
 ## <a name="Next-features"></a>Next features
 Currently, no major updates are expected. <br>
