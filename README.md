@@ -148,7 +148,17 @@ pcne \
 ```
 Each mode can be run providing the reads, or providing directly a prior aligned bam file.
 
-**Note**: if files are not in the working folder, provide the PATH. <br>
+```
+#Example Mode 1 with bam
+pcne \ 
+  -c my_sample.chromosome.fasta \ 
+  -p my_sample.plasmid.fasta \ 
+  -b my_sample_aligned.bam \  
+  -t 8 \ 
+  -o my_sample_pcne
+```
+
+**Note**: bam file has to be sorted before using it <br>
 
 For both modes the main output is a `TSV` file. <br>
 Example `output.tsv`: <br>
@@ -193,7 +203,7 @@ This sets the SAM flag used to filter out reads. Use this to exclude reads with 
 ### --minimap-opts
 Allow to use minimap2 optional parameters.
 ### -b / --bam
-Passing a pre-computed BAM file reduces execution time and allows PCNE to be seamlessly integrated into modular downstream pipelines. 
+Passing a pre-computed BAM file reduces execution time and allows PCNE to be seamlessly integrated into modular downstream pipelines.
 
 ## <a name="Next-features"></a>Next features
 Currently, no major updates are expected. <br>
