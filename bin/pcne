@@ -292,6 +292,7 @@ if [[ ${MODE} -eq 1 ]]; then
     fi
 elif [[ ${MODE} -eq 2 ]]; then
     pls_name_list_arg="${PLS_LIST_FILE}"
+    PLS_GROUPS_FILE=""
 fi
 echo "Done." | tee -a "${LOG_FILE}"
 
