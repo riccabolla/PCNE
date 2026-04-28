@@ -1,6 +1,6 @@
 #!/usr/bin/env Rscript
 
-# Version: 2.2.0 compatible with PCNE v3.2.0
+# Version: 2.2.0 compatible with PCNE v3.3.1
 
 suppressPackageStartupMessages(library(readr))
 suppressPackageStartupMessages(library(dplyr))
