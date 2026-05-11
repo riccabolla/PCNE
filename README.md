@@ -62,6 +62,12 @@ You can use [Docker](https://hub.docker.com/repository/docker/riccabolla/pcne/ge
 docker pull riccabolla/pcne:v3.3.0
 docker run riccabolla/pcne:v3.3.0 pcne -h
 ```
+
+### Nf-core
+```
+nf-core modules install pcne
+```
+
 ### Ubuntu
 ```
 sudo apt install -y bwa samtools r-base bedtools bc
