@@ -60,7 +60,6 @@ It is available as Docker image via [Staph-B](https://hub.docker.com/r/staphb/pc
 
 ```
 docker pull staphb/pcne:latest
-
 ```
 
 ### Nf-core
