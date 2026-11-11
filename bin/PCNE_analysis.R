@@ -1,6 +1,6 @@
 #!/usr/bin/env Rscript
 
-# Version: 2.2.0 compatible with PCNE v3.3.1
+# Version: 2.3.0 compatible with PCNE v3.3.1 and up
 
 suppressPackageStartupMessages(library(readr))
 suppressPackageStartupMessages(library(dplyr))
@@ -41,8 +41,11 @@ if (multi_fasta_mode) {
 
 # --- Read Input Data ---
 message("Reading windowed coverage data...")
-window_data <- readr::read_tsv(window_data_file, show_col_types = FALSE) %>%
-               filter(!is.na(depth), !is.na(gc), is.finite(depth), is.finite(gc), depth >= 0)
+#force contig col to be passed as character
+window_data <- readr::read_tsv(window_data_file, 
+                               col_types = cols(contig = col_character(), .default = col_double()), 
+                               show_col_types = FALSE) %>%
+  filter(!is.na(depth), !is.na(gc), is.finite(depth), is.finite(gc), depth >= 0)
 
 chr_names     <- readLines(chr_list_file)
 plasmid_names <- readLines(plasmid_list_file)
